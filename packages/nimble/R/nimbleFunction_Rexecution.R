@@ -66,16 +66,11 @@ calculate <- function(model, nodes = NA)
 		if(is.na(nodes[1]) ) 
 			nodes <- model$getMaps('nodeNamesLHSall')
 		nfv <- nodeFunctionVector(model, nodes)
-		nodeNames <- model$modelDef$maps$graphID_2_nodeFunctionName[nfv$gids]
-		return(rCalcNodes(nfv$model, nodeNames))
+		return(rCalcNodes(nfv$model, nfv$nodes))
 	}	
-	if(inherits(model, 'nodeFunctionVector') ){ #This seems like a bad name for the argument but the user will not be using
-		realModel <- model$model
-		nodeNames <- realModel$modelDef$maps$graphID_2_nodeFunctionName[nfv$gids]
-
-		return(rCalcNodes(realModel, nodeNames))	# nodeFunctionVectors, so the names of the arguments will be reasonable to them		
+	if(inherits(model, 'nodeFunctionVector') ) #This seems like a bad name for the argument but the user will not be using
+		return(rCalcNodes(model$model, model$nodes))	# nodeFunctionVectors, so the names of the arguments will be reasonable to them		
     }							# but our partially processed code can still work	
-}
 
 rGetLogProbsNodes <- function(model, nodes){
 	l_Prob = 0
@@ -91,15 +86,10 @@ getLogProb <- function(model, nodes = NA)
                     nodes <- model$getMaps('nodeNamesLHSall')
 
 		nfv <- nodeFunctionVector(model, nodes)
-		nodeNames <- model$modelDef$maps$graphID_2_nodeFunctionName[nfv$gids]
-
-    	return(rGetLogProbsNodes(nfv$model, nodeNames))
+    	return(rGetLogProbsNodes(nfv$model, nfv$nodes))
     }        
-	if( inherits(model, "nodeFunctionVector") ){
-		realModel <- model$model
-		nodeNames <- realModel$modelDef$maps$graphID_2_nodeFunctionName[nfv$gids]
-		return(rGetLogProbsNodes(realModel, nodeNames))
-	}
+	if( inherits(model, "nodeFunctionVector") )
+		return(rGetLogProbsNodes(model$model, model$nodes))
 }
 
 
@@ -113,15 +103,15 @@ simulate <- function(model, nodes = NA, includeData = FALSE)
 	if( inherits(model, "modelBaseClass") ) {
 		if(is.na(nodes[1]) ) 
 			nodes <- model$getMaps('nodeNamesLHSall')
-		nfv <- nodeFunctionVector(model, nodes, excludeData = !includeData)
-		nodeNames <- model$modelDef$maps$graphID_2_nodeFunctionName[nfv$gids]			
-		rSimNodes(nfv$model, nodeNames)
+		nfv <- nodeFunctionVector(model, nodes)
+		if(!includeData) {
+			nodes = nfv$nodes
+                        nfv <- nodeFunctionVector(model, nodes[!model$isData(nodes)])
+		}		
+	rSimNodes(nfv$model, nfv$nodes)
 	}
-	if( inherits(model, "nodeFunctionVector") ){
-		realModel <- model$model
-		nodeNames <- realModel$modelDef$maps$graphID_2_nodeFunctionName[nfv$gids]
-		rSimNodes(realModel, nodeNames)
-		}
+	if( inherits(model, "nodeFunctionVector") )
+		rSimNodes(model$model, model$nodes)
 }
 
 

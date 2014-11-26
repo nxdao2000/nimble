@@ -25,12 +25,11 @@
 
 CmodelValues <- setRefClass(
     Class = 'CmodelValues',
-    fields = list(extptr = 'ANY',
+    fields = list(extptr = 'externalptr',
         extptrCall = 'ANY',
         varNames = 'ANY',
         componentExtptrs = 'ANY',
         blankAns = 'ANY',
-        .nodePtrs_byGID = 'ANY',
     	sizes = function(){
     		if(length(varNames) == 0)
     			return(NULL)
@@ -65,20 +64,7 @@ CmodelValues <- setRefClass(
             blankAns <<- componentExtptrs
             for(comp in varNames) 
                 componentExtptrs[[comp]] <<- .Call(getNativeSymbolInfo('getModelObjectPtr'), extptr, comp)
-                
-            .nodePtrs_byGID <<- new('numberedObjects')
             
-            if(length(sizes) > 0){
-            	varLengths <- sapply(sizes, prod)
-            	totLength <- sum(varLengths)
-           		.nodePtrs_byGID$resize(totLength)
-            	index = 1
-            	for(i in seq_along(varNames)){
-          		  	vName <- varNames[i]
-          		  	.Call('populateNumberedObject_withSingleModelValuesAccessors', extptr, vName, as.integer(index), as.integer(varLengths[i]), as.integer(1) , .nodePtrs_byGID$.ptr)
-            		index = index + varLengths[i]
-            	}
-            }
         },
         resize = function(rows){	
         	for(ptr in componentExtptrs)

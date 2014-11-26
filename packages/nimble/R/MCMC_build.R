@@ -46,33 +46,13 @@ buildMCMC <- nimbleFunction(
     setup = function(mcmcspec) {
         model <- mcmcspec$model
         
-   	    RHSonlyNodes <- model$getMaps('nodeNamesRHSonly')
-   	    hasRHSonlyNodes <- length(RHSonlyNodes) > 0
-
-		topDetermNodes <- model$getNodeNames(determOnly = TRUE, topOnly = TRUE)
-		hasTopDetermNodes <- length(topDetermNodes) > 0
-		
-		stochNonDataNodes <- model$getNodeNames(stochOnly = TRUE, includeData = FALSE)
-		
-		initFunctionList <- nimbleFunctionList(mcmcNodeInit_virtual)
-		tot_length = hasRHSonlyNodes + hasTopDetermNodes + length(stochNonDataNodes)
-		
-		iter = 1
-		if(hasRHSonlyNodes){
-			initFunctionList[[iter]] <- mcmcCheckRHS_Init(model = model, node = RHSonlyNodes)
-			iter = iter + 1
-		}
-		
-		if(hasTopDetermNodes){
-			initFunctionList[[iter]] <- mcmcFillDetermTop_Init(model, topDetermNodes)
-			iter = iter + 1
-		}
-		
-		for(i in seq_along(stochNonDataNodes)){
-			initFunctionList[[iter + i - 1]] <- mcmcStochNode_Init(model, stochNonDataNodes[i])
-		}
-		
-
+        RHSonlyNodes <- model$getMaps('nodeNamesRHSonly')
+        RHSonlyInitFunctions <- nimbleFunctionList(RHSonlyInit_virtual)
+        for(i in seq_along(RHSonlyNodes))     { RHSonlyInitFunctions[[i]] <- RHSonlyInit(model, RHSonlyNodes[i]) }
+        
+        modelNodes <- model$getNodeNames()
+        nodeInitFunctions <- nimbleFunctionList(mcmcNodeInit_virtual)
+        for(i in seq_along(modelNodes))     { nodeInitFunctions[[i]] <- mcmcNodeInit(model, modelNodes[i]) }
         
         mvSaved <- modelValues(model)
         samplerFunctions <- nimbleFunctionList(sampler_BASE)
@@ -89,7 +69,8 @@ buildMCMC <- nimbleFunction(
     run = function(niter = integer(), reset = logical(default=TRUE), simulateAll = logical(default=FALSE)) {
         if(simulateAll)     simulate(model)    ## default behavior excludes data nodes
         if(reset) {
-            for(i in seq_along(initFunctionList))  {   initFunctionList[[i]]()   }
+            for(i in seq_along(RHSonlyInitFunctions))  {   RHSonlyInitFunctions[[i]]()   }
+            for(i in seq_along(nodeInitFunctions))     {   nodeInitFunctions[[i]]()      }
             nimCopy(from = model, to = mvSaved, row = 1, logProb = TRUE)
             for(i in seq_along(samplerFunctions))      {   nfMethod(samplerFunctions[[i]], 'reset')()   }
             mvSamples_offset  <- 0
@@ -110,6 +91,7 @@ buildMCMC <- nimbleFunction(
         }
     },  where = getLoadingNamespace()
 )
+
 
 
 ##### OLD (v0.1) machinery for handling samplerOrdering (e.g., samplerCalls: c(1,2,1,3,1,4,1))
