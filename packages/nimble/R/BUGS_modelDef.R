@@ -53,7 +53,8 @@ modelDefClass <- setRefClass('modelDefClass',
                                  modelClass = 'ANY',   ## custom model class
                                  modelValuesClassName = 'ANY',    ## set in setModelValuesClassName()
                                  modelValuesClass = 'ANY', ## custom model values class
-                                 classEnvironment = 'ANY'	#environment		 # environment in which the reference classes will be defined.
+                                 classEnvironment = 'ANY',	#environment		 # environment in which the reference classes will be defined.
+                                 linkInfoEnv = 'ANY'
                              ),
                              
                              methods = list(
@@ -109,6 +110,7 @@ modelDefClass <- setRefClass('modelDefClass',
                                  
                                  genNodeInfo3                    = function() {},
                                  genVarInfo3                     = function() {},
+                                 collectLinkInfo3                = function() {},
                                  genExpandedNodeAndParentNames3  = function() {},
                                  
                                  #These functions are NOT run inside of setupModel
@@ -158,6 +160,7 @@ modelDefClass$methods(setupModel = function(code, constants, dimensions, debug =
         genReplacedTargetValueAndParentInfo()
         genNodeInfo3(debug = debugV3)
         genVarInfo3()
+        collectLinkInfo3()
         genExpandedNodeAndParentNames3(debug = debugV3)
         maps$setPositions3()
         buildSymbolTable()
@@ -317,7 +320,7 @@ modelDefClass$methods(addMissingIndexing = function() {
         newCode <- addMissingIndexingRecurse(BUGSdecl$code, dimensionsList)
         
         BUGSdeclClassObject <- BUGSdeclClass$new()
-        BUGSdeclClassObject$setup(newCode, BUGSdecl$contextID, BUGSdecl$sourceLineNumber)
+        BUGSdeclClassObject$setup(newCode, BUGSdecl$contextID, BUGSdecl$sourceLineNumber, fromLink = BUGSdecl$fromLink)
         declInfo[[i]] <<- BUGSdeclClassObject
     }
 })
@@ -395,7 +398,7 @@ modelDefClass$methods(removeTruncationWrapping = function() {
         newCode[[3]] <- BUGSdecl$valueExpr[[2]]  # insert the core density function call
 
         BUGSdeclClassObject <- BUGSdeclClass$new()
-        BUGSdeclClassObject$setup(newCode, BUGSdecl$contextID, BUGSdecl$sourceLineNumber, BUGSdecl$truncation)
+        BUGSdeclClassObject$setup(newCode, BUGSdecl$contextID, BUGSdecl$sourceLineNumber, BUGSdecl$truncation, fromLink = BUGSdecl$fromLink)
         declInfo[[i]] <<- BUGSdeclClassObject
     }
 })
@@ -414,7 +417,7 @@ modelDefClass$methods(expandDistributions = function() {
         newCode[[3]] <- eval(BUGSdecl$valueExpr, distributions$matchCallEnv)
         
         BUGSdeclClassObject <- BUGSdeclClass$new()
-        BUGSdeclClassObject$setup(newCode, BUGSdecl$contextID, BUGSdecl$sourceLineNumber, BUGSdecl$truncation)
+        BUGSdeclClassObject$setup(newCode, BUGSdecl$contextID, BUGSdecl$sourceLineNumber, BUGSdecl$truncation, fromLink = BUGSdecl$fromLink)
         declInfo[[i]] <<- BUGSdeclClassObject
     }
 })
@@ -441,7 +444,7 @@ modelDefClass$methods(processLinks = function() {
             newDeclInfo[[nextNewDeclInfoIndex]]     <- BUGSdeclClassObject
             
             BUGSdeclClassObject <- BUGSdeclClass$new()
-            BUGSdeclClassObject$setup(newCode, BUGSdecl$contextID, BUGSdecl$sourceLineNumber, BUGSdecl$truncation)
+            BUGSdeclClassObject$setup(newCode, BUGSdecl$contextID, BUGSdecl$sourceLineNumber, BUGSdecl$truncation, fromLink = BUGSdecl$transExpr)
             newDeclInfo[[nextNewDeclInfoIndex + 1]] <- BUGSdeclClassObject
             
         } else {    # deterministic node
@@ -511,7 +514,7 @@ modelDefClass$methods(reparameterizeDists = function() {
         newCode[[3]] <- newValueExpr
         
         BUGSdeclClassObject <- BUGSdeclClass$new()
-        BUGSdeclClassObject$setup(newCode, BUGSdecl$contextID, BUGSdecl$sourceLineNumber, BUGSdecl$truncation)
+        BUGSdeclClassObject$setup(newCode, BUGSdecl$contextID, BUGSdecl$sourceLineNumber, BUGSdecl$truncation, fromLink = BUGSdecl$fromLink)
         declInfo[[i]] <<- BUGSdeclClassObject
     }  # close loop over declInfo
 })
@@ -537,7 +540,7 @@ modelDefClass$methods(addRemainingDotParams = function() {
         newCode <- BUGSdecl$code
         newCode[[3]] <- newValueExpr
         BUGSdeclClassObject <- BUGSdeclClass$new()
-        BUGSdeclClassObject$setup(newCode, BUGSdecl$contextID, BUGSdecl$sourceLineNumber, BUGSdecl$truncation)
+        BUGSdeclClassObject$setup(newCode, BUGSdecl$contextID, BUGSdecl$sourceLineNumber, BUGSdecl$truncation, fromLink = BUGSdecl$fromLink)
         declInfo[[iDecl]] <<- BUGSdeclClassObject
     }
 })
@@ -560,7 +563,7 @@ modelDefClass$methods(insertDistributionBounds = function() {
         newCode[[3]] <- newValueExpr
 
         BUGSdeclClassObject <- BUGSdeclClass$new()
-        BUGSdeclClassObject$setup(newCode, BUGSdecl$contextID, BUGSdecl$sourceLineNumber, BUGSdecl$truncation)
+        BUGSdeclClassObject$setup(newCode, BUGSdecl$contextID, BUGSdecl$sourceLineNumber, BUGSdecl$truncation, fromLink = BUGSdecl$fromLink)
 
         declInfo[[i]] <<- BUGSdeclClassObject
     }
@@ -576,7 +579,7 @@ modelDefClass$methods(replaceAllConstants = function() {
         newCode <- replaceConstantsRecurse(declInfo[[i]]$code, constantsEnv, constantsNamesList)$code
         
         BUGSdeclClassObject <- BUGSdeclClass$new()
-        BUGSdeclClassObject$setup(newCode, declInfo[[i]]$contextID, declInfo[[i]]$sourceLineNumber, declInfo[[i]]$truncation)
+        BUGSdeclClassObject$setup(newCode, declInfo[[i]]$contextID, declInfo[[i]]$sourceLineNumber, declInfo[[i]]$truncation, fromLink =  declInfo[[i]]$fromLink)
         declInfo[[i]] <<- BUGSdeclClassObject
     }
 })
@@ -688,7 +691,7 @@ modelDefClass$methods(liftExpressionArgs = function() {
                 if(!checkForDuplicateNodeDeclaration(newNodeCode, newNodeNameExprIndexed, newDeclInfo)) {
                     
                     BUGSdeclClassObject <- BUGSdeclClass$new()
-                    BUGSdeclClassObject$setup(newNodeCode, BUGSdecl$contextID, BUGSdecl$sourceLineNumber, BUGSdecl$truncation)   ## keep new declaration in the same context, regardless of presence/absence of indexing
+                    BUGSdeclClassObject$setup(newNodeCode, BUGSdecl$contextID, BUGSdecl$sourceLineNumber, BUGSdecl$truncation, fromLink = BUGSdecl$fromLink)   ## keep new declaration in the same context, regardless of presence/absence of indexing
                     newDeclInfo[[nextNewDeclInfoIndex]] <- BUGSdeclClassObject
                     
                     nextNewDeclInfoIndex <- nextNewDeclInfoIndex + 1     ## update for lifting other nodes, and re-adding BUGSdecl at the end
@@ -700,7 +703,7 @@ modelDefClass$methods(liftExpressionArgs = function() {
         newCode[[3]] <- newValueExpr
         
         BUGSdeclClassObject <- BUGSdeclClass$new()
-        BUGSdeclClassObject$setup(newCode, BUGSdecl$contextID, BUGSdecl$sourceLineNumber, BUGSdecl$truncation)
+        BUGSdeclClassObject$setup(newCode, BUGSdecl$contextID, BUGSdecl$sourceLineNumber, BUGSdecl$truncation, fromLink = BUGSdecl$fromLink)
         newDeclInfo[[nextNewDeclInfoIndex]] <- BUGSdeclClassObject    ## regardless of anything, add BUGSdecl itself in
     }    # closes loop over declInfo
     declInfo <<- newDeclInfo
@@ -1896,6 +1899,31 @@ modelDefClass$methods(genExpandedNodeAndParentNames3 = function(debug = FALSE) {
     maps$edgesFrom2ParentExprID <<- split(maps$edgesParentExprID, fedgesFrom)
     maps$graphIDs <<- 1:length(maps$graphID_2_nodeName)
     NULL
+})
+
+modelDefClass$methods(collectLinkInfo3 = function() {
+    llinkInfoEnv <- new.env()
+    for(iDI in seq_along(declInfo)) {
+        BUGSdecl <- declInfo[[iDI]]
+        if(is.null(BUGSdecl$fromLink)) next
+        lhsVar <- BUGSdecl$targetVarName
+        if(is.null(llinkInfoEnv[[lhsVar]])) { ## initialize
+            thisDims <- varInfo[[lhsVar]]$maxs
+            llinkInfoEnv[[lhsVar]] <- if(length(thisDims)==0) as.character(NA) else array(as.character(NA), dim = thisDims)
+        }
+        
+        if(is.environment(BUGSdecl$replacementsEnv)) { ## this means there was some replacement involved in this BUGS line
+            forCode <- substitute( for(iAns in 1:OUTPUTSIZE) ASSIGNCODE <- LINKNAME, list(OUTPUTSIZE = BUGSdecl$outputSize, ASSIGNCODE = BUGSdecl$targetExprReplaced, LINKNAME = as.character(BUGSdecl$fromLink)))
+            BUGSdecl$replacementsEnv[[lhsVar]] <- llinkInfoEnv[[lhsVar]]
+            eval(forCode, envir = BUGSdecl$replacementsEnv)
+            llinkInfoEnv[[lhsVar]] <- BUGSdecl$replacementsEnv[[lhsVar]]
+            rm(list = lhsVar, envir = BUGSdecl$replacementsEnv)
+        } else {
+            ## If no replacementsEnv was set up, then there were no index variables (only numerics)
+            eval(substitute(A <- B, list(A = BUGSdecl$targetExprReplaced, B = as.character(BUGSdecl$fromLink))), envir = llinkInfoEnv)
+        }
+    }
+    linkInfoEnv <<- llinkInfoEnv
 })
 
 modelDefClass$methods(genVarInfo3 = function() {

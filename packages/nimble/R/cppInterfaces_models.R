@@ -153,7 +153,7 @@ makeModelBindingFields <- function(symTab) {
       if(missing(x) ) 
         getNimValues(VPTR, 2)
       else
-        setNimValues(VPTR, x, 2, allowResize = FALSE)
+        setNimValues(VPTR, x, 2, allowResize = FALSE)  ## EXPAND THIS FOR LINK CASES
     }, list(VPTR = as.name(ptrName), VARNAME = vn) ) )
   }
   return(fieldList)

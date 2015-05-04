@@ -659,6 +659,8 @@ RMakeCustomModelClass <- function(vars, className, isDataVars, modelDef, where =
                       modelDef = modelDef,
                       isDataVars = isDataVars)
 
+    linkInfoList <- vector('list', length = length(inputList))
+    
     ## uncomment this line if we want to ensure that every model refClass we generate is uniquely named internally
     className <- paste0(className, '_', nimbleUniqueID())
     
@@ -682,7 +684,7 @@ RMakeCustomModelClass <- function(vars, className, isDataVars, modelDef, where =
                 # removed given new handling of lumped data and constants
             }
         ), where = where),
-                    list(FIELDS = makeBUGSclassFields(varnames)
+                    list(FIELDS = makeBUGSclassFields(varnames, linkInfoList)
                          )))
     ans <- function(name = character()) {
         newClass(inputList = inputList, name = name)
@@ -695,7 +697,7 @@ MakeCustomModelClass <- function(vars, className, where = globalenv())
 
 ## This builds the list of all fields needed for a reference class definition.
 ## It is built as an unevaluated list parse tree so that when the class if created the function definitions are evaluated then.
-makeBUGSclassFields <- function(vars) {
+makeBUGSclassFields <- function(vars, linkInfoList = NULL) {
     activeBindingDefs <- list()
     envDefs <- as.list(rep('ANY', length(vars)))
     names(envDefs) <- makeEnvName(vars)    
@@ -724,6 +726,42 @@ activeBindingTemplate <- quote( function(value) {
         return(invisible(value))
     }
 })
+
+activeBindingTemplateWithLinkVarSubsetted <- quote( function(value) {
+    if(missing(value)) return(if(is.na(ROWNAME)) ENVNAME[[VARNAME]] else ENVNAME[[VARNAME]][[ROWNAME]]) ## commas will get inserted after ROWNAME
+    else {
+        if(is.na(ROWNAME)) {
+            ENVNAME[[VARNAME]] <- value
+            ##for(i in seq_along(USELINKBOOLNAME)) .self[[LINKVARNAME]][USELINKBOOLNAME[[i]] ] <- evalq(LINKFUN[i], value[USELINKBOOLNAME[[i]]])
+            LINKASSIGNCODEBLOCK
+        }
+        else {
+            ENVNAME[[VARNAME]][[ROWNAME]] <- value
+            .self[[LINKVARNAME]][[ROWNAME]][USELINKBOOLNAME] <- LINKFUN(value[USELINKBOOLNAME])
+        }
+        return(invisible(value))
+    }
+})
+
+linkAssignTemplate <- quote(
+    
+    )
+
+activeBindingTemplateWithLinkVarAll <- quote( function(value) {
+    if(missing(value)) return(if(is.na(ROWNAME)) ENVNAME[[VARNAME]] else ENVNAME[[VARNAME]][[ROWNAME]]) ## commas will get inserted after ROWNAME
+    else {
+        if(is.na(ROWNAME)) {
+            ENVNAME[[VARNAME]] <- value
+            .self[[LINKVARNAME]] <- LINKFUN(value)
+        }
+        else {
+            ENVNAME[[VARNAME]][[ROWNAME]] <- value
+            .self[[LINKVARNAME]][[ROWNAME]] <- LINKFUN(value)
+        }
+        return(invisible(value))
+    }
+})
+
 
 createDefault_isDataObj <- function(obj) {
     if(length(obj) == 0) return(FALSE)

@@ -28,6 +28,7 @@ BUGSdeclClass <- setRefClass('BUGSdeclClass',
                                  targetNodeExpr = 'ANY',
                                  targetVarName = 'ANY',
                                  targetNodeName = 'ANY',
+                                 fromLink = 'ANY',      ## This records a link function from a previous version of the BUGS line, needed to get propogated assignments correct
                                  
                                  ## truncation information
                                  truncation = 'ANY',
@@ -115,7 +116,7 @@ BUGSdeclClass <- setRefClass('BUGSdeclClass',
 )
 
 
-BUGSdeclClass$methods(setup = function(code, contextID, sourceLineNum, truncation = NULL) {
+BUGSdeclClass$methods(setup = function(code, contextID, sourceLineNum, truncation = NULL, fromLink = NULL) {
     ## master entry function.
     ## uses 'contextID' to set the field: contextID.
     ## uses 'code' argument, to set the fields:
@@ -128,6 +129,7 @@ BUGSdeclClass$methods(setup = function(code, contextID, sourceLineNum, truncatio
     sourceLineNumber <<- sourceLineNum
     code <<- code
     truncation <<- truncation
+    fromLink <<- fromLink
     
     if(code[[1]] == '~') {
         type <<- 'stoch'
