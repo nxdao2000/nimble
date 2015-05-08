@@ -572,7 +572,19 @@ RModelBaseClass <- setRefClass("RModelBaseClass",
                                        defaultModelValues <<- modelDef$modelValuesClass(1)
                                        pointAt(.self, defaultModelValues, index = 1)
                                    },
-                                   
+                                   buildLinkAssignmentNodeFunctions = function() { ## These are nodeFunctions that are not in the graph.
+                                       ## They exist to be used to make assignment to link-transformed variables more user-friendly
+                                       ## When we process a model, log(x) ~ dnorm(...) creates log_x ~ dnorm(...) and x <- exp(log_x)
+                                       ## Those are fine and behave ok in the graph.  E.g. an MCMC can identify log_x as a target variable and all is good
+                                       ## But model$x <- 1.23 is confusing because the user wants model$log_x to be set to log(1.23)
+                                       ## These functions provide a way to do that
+                                       ##
+                                       ## Question: should they go in the nodeGenerators and nodeFunctions lists?  Or should they be in separate lists?
+                                       ##    - would go automatically in the nodes
+                                       ##    - cppDefs_BUGSmodel iterates over nodeFunctions to add them to the project and compile them
+                                       ##    - the cppXXX objects go into nodeFuns
+                                       ##    - cppInterfaces_models iterates over them
+                                   },
                                    buildNodeFunctions = function(where = globalenv(), debug = FALSE) {
                                        ## This creates the nodeFunctions, which are basically nimbleFunctions, for the model
                                        if(debug) browser()
@@ -744,7 +756,7 @@ activeBindingTemplateWithLinkVarSubsetted <- quote( function(value) {
 })
 
 linkAssignTemplate <- quote(
-    
+    foo ## quote() is an error, so this is a placeholder
     )
 
 activeBindingTemplateWithLinkVarAll <- quote( function(value) {
