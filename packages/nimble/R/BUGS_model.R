@@ -561,6 +561,7 @@ RModelBaseClass <- setRefClass("RModelBaseClass",
                                fields = list(
                                    nodeFunctions = 'ANY',	#list
                                    nodeGenerators = 'ANY',	#list
+                                   linkAssignNodeGenerators = 'ANY', #list
                                    Cname = 'ANY',		#character
                                    CobjectInterface = 'ANY'
                                    ),
@@ -572,12 +573,58 @@ RModelBaseClass <- setRefClass("RModelBaseClass",
                                        defaultModelValues <<- modelDef$modelValuesClass(1)
                                        pointAt(.self, defaultModelValues, index = 1)
                                    },
-                                   buildLinkAssignmentNodeFunctions = function() { ## These are nodeFunctions that are not in the graph.
+                                   buildLinkAssignmentNodeFunctions = function(where = globalenv(), debug = FALSE) { ## These are nodeFunctions that are not in the graph.
                                        ## They exist to be used to make assignment to link-transformed variables more user-friendly
                                        ## When we process a model, log(x) ~ dnorm(...) creates log_x ~ dnorm(...) and x <- exp(log_x)
                                        ## Those are fine and behave ok in the graph.  E.g. an MCMC can identify log_x as a target variable and all is good
                                        ## But model$x <- 1.23 is confusing because the user wants model$log_x to be set to log(1.23)
                                        ## These functions provide a way to do that
+                                       iNextNodeFunction <- length(nodeFunctions)+1
+                                       linkAssignNodeGenerators <<- vector('list', length(modelDef$declInfo))
+                                       for(i in seq_along(modelDef$declInfo)) {
+                                           BUGSdecl <- modelDef$declInfo[[i]]
+                                           if(is.null(BUGSdecl$fromLink)) next
+                                           browser()
+                                           code <- BUGSdecl$codeReplaced ## something like x[i] <- exp(log_x[i])
+                                           newRHS <- code[[3]]              ## exp(log_x[i])
+                                           newRHS[[1]] <- BUGSdecl$fromLink ## log(log_x[i])
+                                           newRHS[[2]] <- code[[2]]         ## log(x[i])
+                                           newLHS <- code[[3]][[2]]         ## log_x[i]
+                                           setupOutputExprs <- BUGSdecl$indexVariableExprs
+                                           browser()
+                                           thisNodeGeneratorName <- paste0(Rname2CppName(BUGSdecl$targetVarName), '_linkAssign_L', BUGSdecl$sourceLineNumber, '_', nimbleUniqueID())
+                                           nfGenerator <- nodeFunction(LHS = newLHS, RHS = newRHS, name = thisNodeGeneratorName, altParams = list(),
+                                                                       logProbNodeExpr = NULL, type = 'determ', setupOutputExprs = setupOutputExprs,
+                                                                       evaluate = TRUE, where = where)
+
+                                           newNodeFunctionNames <- paste0(BUGSdecl$nodeFunctionNames,'_linkAssign')
+                                           names(linkAssignNodeGenerators)[i] <<- thisNodeGeneratorName
+
+                                           ## If it is a singleton with no replacements, we can build the node simply:
+                                           ## What follows is identical to a block of code in buildNodeFunctions and could be re-used in the future.
+                                           if(length(setupOutputExprs)==0) { 
+                                               nodeFunctions[[iNextNodeFunction]] <<- nfGenerator(.self)
+                                               names(nodeFunctions)[iNextNodeFunction] <<- newNodeFunctionNames
+                                               iNextNodeFunction <- iNextNodeFunction + 1
+                                               next
+                                           }
+                                           
+                                           assign('MODEL_UNIQUE_NAME_', .self, envir = BUGSdecl$replacementsEnv)
+                                           BUGSdecl$replacementsEnv[['nfGenCall_UNIQUE_NAME_']] <- as.call(c(list(quote(nfGenerator_UNIQUE_NAME_)), list(model = quote(MODEL_UNIQUE_NAME_)), lapply(setupOutputExprs, function(z) substitute(x[[index_UNIQUE_NAME_]], list(x = z)))))
+                                           BUGSdecl$replacementsEnv[['nfGenerator_UNIQUE_NAME_']] <- nfGenerator
+                                           evalq({
+                                               nfGenWrap_UNIQUE_NAME_ <- function(index_UNIQUE_NAME_) x
+                                               body(nfGenWrap_UNIQUE_NAME_) <- nfGenCall_UNIQUE_NAME_
+                                           }, envir = BUGSdecl$replacementsEnv)
+                                           
+                                           numNewFunctions <- BUGSdecl$outputSize
+                                           nodeFunctions[iNextNodeFunction-1+(1:numNewFunctions)] <<- evalq(lapply(1:outputSize, nfGenWrap_UNIQUE_NAME_), envir = BUGSdecl$replacementsEnv)
+                                           rm(list = c('MODEL_UNIQUE_NAME_', 'nfGenCall_UNIQUE_NAME_', 'nfGenerator_UNIQUE_NAME_', 'nfGenWrap_UNIQUE_NAME_'), envir = BUGSdecl$replacementsEnv)
+                                           
+                                           names(nodeFunctions)[iNextNodeFunction-1+(1:numNewFunctions)] <<- BUGSdecl$nodeFunctionNames
+                                           iNextNodeFunction <- iNextNodeFunction + numNewFunctions
+                                       }
+                                       
                                        ##
                                        ## Question: should they go in the nodeGenerators and nodeFunctions lists?  Or should they be in separate lists?
                                        ##    - would go automatically in the nodes

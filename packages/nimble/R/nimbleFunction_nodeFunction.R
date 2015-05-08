@@ -45,6 +45,8 @@ ndf_createMethodList <- function(LHS, RHS, altParams, logProbNodeExpr, type, set
             list(
                 simulate   = function() { LHS <<- RHS                                                 },
                 calculate  = function() { simulate();    returnType(double());   return(invisible(0)) },
+##                simulate   = function() { calculate();                                                },
+##                calculate  = function() { LHS <<- RHS;   returnType(double());   return(invisible(0)) },
                 getLogProb = function() {                returnType(double());   return(0)            }
             ),
             list(LHS=LHS, 

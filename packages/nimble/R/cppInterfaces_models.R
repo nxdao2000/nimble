@@ -68,8 +68,6 @@ CmodelBaseClass <- setRefClass('CmodelBaseClass',
                                        ##     - by iterating through the nodeGenerators in the Rmodel
                                        ##browser()
                                        
-
-                                       
                                        nodesEnv <- new.env()
                                        for(i in names(Rmodel$nodeFunctions)) {
                                            nodesEnv[[i]] <- nimbleProject$instantiateNimbleFunction(Rmodel$nodes[[i]], dll = dll)
@@ -80,38 +78,38 @@ CmodelBaseClass <- setRefClass('CmodelBaseClass',
                                        maxID = max(modelDef$maps$graphIDs)
                                        .nodeFxnPointers_byGID$resize(maxID)
                                        for(nodeName in ls(nodes)){
-                                       		gID <- modelDef$nodeName2GraphIDs(nodeName)
-                                       		.self$.nodeFxnPointers_byGID[gID] <- nodes[[nodeName]]$.basePtr
-                                       		}
-                                       		
+                                           gID <- modelDef$nodeName2GraphIDs(nodeName)
+                                           .self$.nodeFxnPointers_byGID[gID] <- nodes[[nodeName]]$.basePtr
+                                       }
+                                       
                                        .nodeValPointers_byGID <<- new('numberedModelVariableAccessors')
                                        .nodeValPointers_byGID$resize(maxID)
                                        .nodeLogProbPointers_byGID <<- new('numberedModelVariableAccessors')
                                        .nodeLogProbPointers_byGID$resize(maxID)
                                        for(vName in Rmodel$getVarNames()){
-                                       		flatIndices = 1
-                                       		if(length(vars[vName]) > 0)
-	                                       		flatIndices = 1:prod(unlist(vars[vName]))
-                                       		
-                                       		gIDs_withNAs = unlist(sapply(vName, parseEvalNumeric, env = Rmodel$modelDef$maps$vars2GraphID_values, USE.NAMES = FALSE))
-                                       		validIndices = which(!is.na(gIDs_withNAs))
-                                       		gIDs = gIDs_withNAs[validIndices] 	#Rmodel$expandNodeNames(namesWflatIndices, returnScalarComponents = TRUE, returnType = 'ids')
-											
-                                       		.Call('populateNumberedObject_withSingleModelVariablesAccessors', .basePtr , vName, as.integer(gIDs), as.integer(validIndices), .nodeValPointers_byGID$.ptr)
-                                       		logVNames <- modelDef$nodeName2LogProbName(vName)
-                                       		if(length(logVNames) > 0){
-                                       			logVName <- nl_getVarNameFromNodeName(logVNames[1])
-                                       			LP_gIDs_withNAs =  unlist(sapply(vName, parseEvalNumeric, env = Rmodel$modelDef$maps$vars2LogProbID, USE.NAMES = FALSE))
-	                                       		validIndices = which(!is.na(LP_gIDs_withNAs) ) 
-	                                       		l_gIDs = Rmodel$modelDef$nodeName2LogProbID(vName)
-	                                       		.Call('populateNumberedObject_withSingleModelVariablesAccessors', .basePtr, logVName, as.integer(l_gIDs), as.integer(validIndices), .nodeLogProbPointers_byGID$.ptr)
-	                                       		}
+##                                           flatIndices = 1
+##                                           if(length(vars[vName]) > 0)
+##                                               flatIndices = 1:prod(unlist(vars[vName]))
+                                           
+                                           gIDs_withNAs = unlist(sapply(vName, parseEvalNumeric, env = Rmodel$modelDef$maps$vars2GraphID_values, USE.NAMES = FALSE))
+                                           validIndices = which(!is.na(gIDs_withNAs))
+                                           gIDs = gIDs_withNAs[validIndices] 	#Rmodel$expandNodeNames(namesWflatIndices, returnScalarComponents = TRUE, returnType = 'ids')
+                                           
+                                           .Call('populateNumberedObject_withSingleModelVariablesAccessors', .basePtr , vName, as.integer(gIDs), as.integer(validIndices), .nodeValPointers_byGID$.ptr)
+                                           logVNames <- modelDef$nodeName2LogProbName(vName)
+                                           if(length(logVNames) > 0){
+                                               logVName <- nl_getVarNameFromNodeName(logVNames[1])
+                                               LP_gIDs_withNAs =  unlist(sapply(vName, parseEvalNumeric, env = Rmodel$modelDef$maps$vars2LogProbID, USE.NAMES = FALSE))
+                                               validIndices = which(!is.na(LP_gIDs_withNAs) ) 
+                                               l_gIDs = Rmodel$modelDef$nodeName2LogProbID(vName)
+                                               .Call('populateNumberedObject_withSingleModelVariablesAccessors', .basePtr, logVName, as.integer(l_gIDs), as.integer(validIndices), .nodeLogProbPointers_byGID$.ptr)
+                                           }
                                        }
                                        ## for(i in seq_along(Rmodel$nodeGenerators)) {
                                        ##     nodeGenName <- names(Rmodel$nodeGenerators)[i]
                                        ##     nfName <- environment(compiledModel$nodeFuns[[nodeGenName]]$Rgenerator)$refName
                                        ##     CnodeFunClasses[[nfName]] <<- compiledModel$nodeFuns[[nodeGenName]]$Rgenerator
-                                           
+                                       
                                        ##     ## using eval(substitute is purely to avoid a warning about <- instead of <<-
                                        ##     ## nfName is the name of the class created in buildNimbleFxnInterface, i.e. the interface class
                                        ##     ## I don't think this is used anywhere else.

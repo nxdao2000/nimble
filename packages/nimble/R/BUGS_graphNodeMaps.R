@@ -47,7 +47,11 @@ mapsClass <- setRefClass(
         edgesTo = 'ANY',
         edgesParentExprID = 'ANY',
         edgesFrom2To = 'ANY',
-        edgesFrom2ParentExprID = 'ANY'
+        edgesFrom2ParentExprID = 'ANY',
+
+        ##linkAssignment stuff
+        linkAssignmentNames = 'ANY',
+        linkAssignmentIDs = 'ANY'
         
         
     ),

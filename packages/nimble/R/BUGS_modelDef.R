@@ -1470,6 +1470,9 @@ modelDefClass$methods(genExpandedNodeAndParentNames3 = function(debug = FALSE) {
         }
     }
 
+    ##linkAssignment
+    linkAssignmentNames <- character()
+    
     ## 2. collect names and do eval to create variables in vars_2_nodeOrigID
     next_origID <- 1              ## this is a counter for the next origID to be assigned
     allNodeNames <- character()   ## vector of all node names
@@ -1526,6 +1529,7 @@ modelDefClass$methods(genExpandedNodeAndParentNames3 = function(debug = FALSE) {
             vars_2_nodeOrigID[[lhsVar]] <- next_origID
             next_origID <- next_origID + 1
         }
+        if(!is.null(BUGSdecl$fromLink)) linkAssignmentNames <- c(linkAssignmentNames, paste0(BUGSdecl$nodeFunctionNames, "_linkAssign"))
     }
     nodeNamesLHSall <- allNodeNames
     maxOrigNodeID <- next_origID - 1
@@ -1898,32 +1902,36 @@ modelDefClass$methods(genExpandedNodeAndParentNames3 = function(debug = FALSE) {
     maps$edgesFrom2To <<- split(maps$edgesTo, fedgesFrom)
     maps$edgesFrom2ParentExprID <<- split(maps$edgesParentExprID, fedgesFrom)
     maps$graphIDs <<- 1:length(maps$graphID_2_nodeName)
+
+    ## Stuff for linkAssignment
+    maps$linkAssignmentNames <<- linkAssignmentNames
+    maps$linkAssignmentIDs <<- max(maps$graphIDs) + seq_along(linkAssignmentNames)
     NULL
 })
 
 modelDefClass$methods(collectLinkInfo3 = function() {
-    llinkInfoEnv <- new.env()
+    localLinkInfoEnv <- new.env()
     for(iDI in seq_along(declInfo)) {
         BUGSdecl <- declInfo[[iDI]]
-        if(is.null(BUGSdecl$fromLink)) next
+        if(is.null(BUGSdecl$fromLink)) next ## this is only non-null for a *stochastic* link
         lhsVar <- BUGSdecl$targetVarName
-        if(is.null(llinkInfoEnv[[lhsVar]])) { ## initialize
+        if(is.null(localLinkInfoEnv[[lhsVar]])) { ## initialize
             thisDims <- varInfo[[lhsVar]]$maxs
-            llinkInfoEnv[[lhsVar]] <- if(length(thisDims)==0) as.character(NA) else array(as.character(NA), dim = thisDims)
+            localLinkInfoEnv[[lhsVar]] <- if(length(thisDims)==0) as.character(NA) else array(as.character(NA), dim = thisDims)
         }
         
         if(is.environment(BUGSdecl$replacementsEnv)) { ## this means there was some replacement involved in this BUGS line
             forCode <- substitute( for(iAns in 1:OUTPUTSIZE) ASSIGNCODE <- LINKNAME, list(OUTPUTSIZE = BUGSdecl$outputSize, ASSIGNCODE = BUGSdecl$targetExprReplaced, LINKNAME = as.character(BUGSdecl$fromLink)))
-            BUGSdecl$replacementsEnv[[lhsVar]] <- llinkInfoEnv[[lhsVar]]
+            BUGSdecl$replacementsEnv[[lhsVar]] <- localLinkInfoEnv[[lhsVar]]
             eval(forCode, envir = BUGSdecl$replacementsEnv)
-            llinkInfoEnv[[lhsVar]] <- BUGSdecl$replacementsEnv[[lhsVar]]
+            localLinkInfoEnv[[lhsVar]] <- BUGSdecl$replacementsEnv[[lhsVar]]
             rm(list = lhsVar, envir = BUGSdecl$replacementsEnv)
         } else {
             ## If no replacementsEnv was set up, then there were no index variables (only numerics)
-            eval(substitute(A <- B, list(A = BUGSdecl$targetExprReplaced, B = as.character(BUGSdecl$fromLink))), envir = llinkInfoEnv)
+            eval(substitute(A <- B, list(A = BUGSdecl$targetExprReplaced, B = as.character(BUGSdecl$fromLink))), envir = localLinkInfoEnv)
         }
     }
-    linkInfoEnv <<- llinkInfoEnv
+    linkInfoEnv <<- localLinkInfoEnv
 })
 
 modelDefClass$methods(genVarInfo3 = function() {
@@ -2223,7 +2231,7 @@ modelDefClass$methods(buildMaps2 = function() {
 
 })
 
-modelDefClass$methods(newModel = function(data = list(), inits = list(), where = globalenv(), modelName = character()) {
+modelDefClass$methods(newModel = function(data = list(), inits = list(), where = globalenv(), modelName = character(), doLinkAssignment = FALSE) {
     if(inherits(modelClass, 'uninitializedField')) {
         vars <- lapply(varInfo, `[[`, 'maxs')
         logProbVars <- lapply(logProbVarInfo, `[[`, 'maxs')
@@ -2244,6 +2252,7 @@ modelDefClass$methods(newModel = function(data = list(), inits = list(), where =
     model <- modelClass(name = modelName)
     model$setGraph(graph)
     model$buildNodeFunctions(where = where)
+    if(doLinkAssignment) model$buildLinkAssignmentNodeFunctions(where = where)
     model$buildNodesList() ## This step makes RStudio choke, we think from circular reference classes -- fixed, by not displaying Global Environment in RStudio
     model$setData(data)
     # prevent overwriting of data values by inits
@@ -2300,7 +2309,12 @@ modelDefClass$methods(printDI = function() {
     }
 })
 
-
+modelDefClass$methods(nodeName2GraphIDsWithLinkAssignments = function(nodeName) {
+    if(length(nodeName) == 0)
+        return(NULL)
+    ## STOPPED HERE - checking cppIntefaces_models--> setupNodes ## should it use vars2GraphID_elements instead of vars2GraphID_values ?
+     output <- unique(unlist(sapply(nodeName, parseEvalNumeric, env = maps$vars2GraphID_functions_and_RHSonly, USE.NAMES = FALSE)))
+}
 
 modelDefClass$methods(nodeName2GraphIDs = function(nodeName, nodeFunctionID = TRUE){
 	if(length(nodeName) == 0)
