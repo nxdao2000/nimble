@@ -196,7 +196,7 @@ distClass <- setRefClass(
 #####################################################################################################
 
 checkDistributionsInput <- function(distributionsInput) {
-    allowedFields <- unique(unlist(sapply(nimble:::distributionsInputList, names)))
+    allowedFields <- unique(unlist(sapply(distributionsInputList, names)))
     if(sum(!names(distributionsInput) %in% allowedFields)) 
         stop(paste0(names(distributionsInput), " has unknown field."))
     if(!sum(is.character(distributionsInput$BUGSdist))) stop(paste0(distributionsInput$BUGSdist, ": field 'BUGSdist' is not of type character."))

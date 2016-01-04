@@ -492,6 +492,10 @@ Details: The return value is a named list, with an element corresponding to each
                                       conjugacyRelationshipsObject$checkConjugacy2(.self, nodeIDs)
                                   },
                                   check = function() {
+                                      '
+Checks for common errors in model specification, including missing values, inability to calculate/simulate on a node, and dimension/size mismatches
+'
+                                  
                                       lp <- try(calculate(.self))
                                       if(isValid(lp)) return(invisible(TRUE))
                                       varsToCheck <- character()
@@ -532,7 +536,68 @@ Details: The return value is a named list, with an element corresponding to each
                                           m <- conds[[i]][2]
                                           if(!is.null(v)) cat(m, ' were detected in model variable', if(grepl(',',v)) 's' else '', ': ', v, ".\n", sep = '')
                                       }
+
+                                      browser()
+                                      
+                                      # size checking
+                                      md <- .self$modelDef
+                                      for(j in seq_along(.self$modelDef$declInfo)) {
+                                              di <- .self$modelDef$declInfo[[j]]
+                                              nn <- length(di$nodeFunctionNames)
+                                              nfn <- di$nodeFunctionNames[nn]
+                                              nf <- .self$nodeFunctions[[nfn]]
+                                              context <- as.list(di$unrolledIndicesMatrix[nrow(di$unrolledIndicesMatrix), ])
+
+                                              if(di$type == 'determ') {
+                                                  # check LHS and RHS are same size/dim
+                                                  RHSsize = dimOrLength(eval(nimble:::codeSubstitute(di$valueExprReplaced, context)))
+                                                  LHSsize = dimOrLength(eval(nimble:::codeSubstitute(di$targetExprReplaced, context)))
+                                                  if(!identical(LHSsize, RHSsize))
+                                                      stop("Size/dimension mismatch between left-hand side and right-hand size of BUGS expression: ", deparse(di$code))
+                                              } else {
+                                                  # check dims of param args match those in distInputList and that sizes of vecs and row/column sizes all match for non-scalar quantities
+        #valueSize <- dimOrLength(nf$get_value())
+                                                  dist <- di$valueExprReplaced[[1]]  
+                                                  tmp <- nimble:::distributionsInputList[[deparse(dist)]]$types
+                                                  tmp <- strsplit(tmp, " = ")
+                                                  nms <- sapply(tmp, `[[`, 1)
+                                                  # theoretical dimensions
+                                                  distDims <- as.integer(sapply(tmp, function(x) parse(text = x[[2]])[[1]][[2]]))
+                                                  names(distDims) <- nms
+                                                  
+                                                  sizes <- list(); length(sizes) <- length(nms); names(sizes) <- nms
+
+                                                  for(k in seq_along(nms)) {
+                                                      # sometimes get_blah not found (and doesn't appear in ls(nf) )
+                                                      # fun <- as.name(paste0("get_", nms[k]))
+                                                      # e = try(eval(fun, envir = nf)())
+                                                      
+                                                      # so try this 
+                                                      fun <- paste0("nf$get_", nms[k], "()")
+                                                      e <- eval(parse(text = fun))
+                                                      if(!is(e, "try-error")) {
+                                                          sizes[[nms[k]]] <- dimOrLength(e)
+                                                      } else sizes[[nms[k]]] <- NA
+                                                  }
+                                                  # actual dimensions
+                                                  dims <- sapply(sizes, length)
+        
+                                                  if(!identical(dims[!is.na(sizes)], distDims[!is.na(sizes)])) {
+                                                      mismatches <- names(which(dims[!is.na(sizes)] != distDims[!is.na(sizes)]))
+                                                      stop("Dimension of distribution argument(s) '", mismatches, "' does not match required dimensions for the distribution '", dist, "'")
+                                                  }
+
+                                                  # check sizes
+                                                  mats <- dims == 2
+                                                  vecs <- dims == 1
+                                                  matRows <- unlist(sapply(sizes[mats], `[`, 1))
+                                                  matCols <- unlist(sapply(sizes[mats], `[`, 2))
+                                                  if(!length(unique(c(matRows, matCols, unlist(sizes[vecs])))) == 1)
+                                                      stop("Size/dimension mismatch amongst vectors and matrices in BUGS expression: ", deparse(di$code))
+                                              }
+                                      }
                                   },
+
                                   newModel = function(data = NULL, inits = NULL, modelName = character(), replicate = FALSE, check = TRUE) {
                                       '
 Returns a new R model object, with the same model definiton (as defined from the original model code) as the existing model object.
