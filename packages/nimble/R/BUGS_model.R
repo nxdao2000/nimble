@@ -550,8 +550,8 @@ Checks for common errors in model specification, including missing values, inabi
 
                                               if(di$type == 'determ') {
                                                   # check LHS and RHS are same size/dim
-                                                  RHSsize = dimOrLength(eval(nimble:::codeSubstitute(di$valueExprReplaced, context)))
-                                                  LHSsize = dimOrLength(eval(nimble:::codeSubstitute(di$targetExprReplaced, context)))
+                                                  RHSsize = dimOrLength(eval(codeSubstitute(di$valueExprReplaced, context)))
+                                                  LHSsize = dimOrLength(eval(codeSubstitute(di$targetExprReplaced, context)))
                                                   if(!identical(LHSsize, RHSsize))
                                                       stop("Size/dimension mismatch between left-hand side and right-hand size of BUGS expression: ", deparse(di$code))
                                               } else {
@@ -569,12 +569,12 @@ Checks for common errors in model specification, including missing values, inabi
 
                                                   for(k in seq_along(nms)) {
                                                       # sometimes get_blah not found (and doesn't appear in ls(nf) )
-                                                      # fun <- as.name(paste0("get_", nms[k]))
-                                                      # e = try(eval(fun, envir = nf)())
+                                                       fun <- as.call(parse(text = paste0("get_", nms[k])))
+                                                       e = try(eval(fun, envir = nf))
                                                       
                                                       # so try this 
-                                                      fun <- paste0("nf$get_", nms[k], "()")
-                                                      e <- eval(parse(text = fun))
+                                                     # fun <- paste0("nf$get_", nms[k], "()")
+                                                     # e <- eval(parse(text = fun))
                                                       if(!is(e, "try-error")) {
                                                           sizes[[nms[k]]] <- dimOrLength(e)
                                                       } else sizes[[nms[k]]] <- NA
