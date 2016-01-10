@@ -541,7 +541,6 @@ Checks for common errors in model specification, including missing values, inabi
                                       browser()
                                       
                                       # size checking
-                                      md <- .self$modelDef
                                       for(j in seq_along(.self$modelDef$declInfo)) {
                                               declInfo <- .self$modelDef$declInfo[[j]]
                                               nn <- length(declInfo$nodeFunctionNames)
@@ -593,15 +592,15 @@ Checks for common errors in model specification, including missing values, inabi
                                                       if(length(declInfo$targetExprReplaced) > 1) {
                                                           LHSvar <- deparse(declInfo$targetExprReplaced[[2]])
                                                       } else LHSvar <- deparse(declInfo$targetExprReplaced)
-                                                      if(md$varInfo[[LHSvar]]$nDim != distDims['value'])
-                                                          stop("Dimension of '", LHSvar, "' does not match required dimension for the distribution '", dist, "'. You may need to include explicit indexing information, e.g., ", LHSvar, "[1:10].")
+                                                      if(.self$modelDef$varInfo[[LHSvar]]$nDim != distDims['value'])
+                                                          stop("Dimension of '", LHSvar, "' does not match required dimension for the distribution '", dist, "'. You may need to include explicit indexing information, e.g., ", LHSvar, ifelse(distDims['value'] < 2, "[1:2].", "[1:2,1:2]."))
                                                       nms2 <- nms[nms%in%names(declInfo$valueExprReplaced)]
                                                       for(k in seq_along(nms2)) {
                                                           if(length(declInfo$valueExprReplaced[[nms2[k]]]) > 1) {
                                                               var <- deparse(declInfo$valueExprReplaced[[nms2[k]]][[2]])
                                                           } else var <- deparse(declInfo$valueExprReplaced[[nms2[k]]])
-                                                          if(md$varInfo[[var]]$nDim != distDims[nms2[k]])
-                                                              stop("Dimension of '", var, "' does not match required dimension for the distribution '", dist, "'. You may need to include explicit indexing information, e.g., ", var, "[1:10].")
+                                                          if(.self$modelDef$varInfo[[var]]$nDim != distDims[nms2[k]])
+                                                              stop("Dimension of '", nms2[k], "' does not match required dimension for the distribution '", dist, "'. You may need to include explicit indexing information, e.g., variable_name", ifelse(distDims[nms2[k]] < 2, "[1:2].", "[1:2,1:2]."))
                                                       }
                                                       
                                                       # actual dimensions

@@ -102,6 +102,9 @@ modelDefClass <- setRefClass('modelDefClass',
                                  
                                  genNodeInfo3                   = function() {},
                                  genVarInfo3                    = function() {},
+
+                                 # put check of var dims here?
+
                                  genExpandedNodeAndParentNames3 = function() {},
                                  
                                  #These functions are NOT run inside of setupModel
