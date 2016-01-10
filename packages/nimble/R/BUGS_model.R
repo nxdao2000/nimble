@@ -547,20 +547,28 @@ Checks for common errors in model specification, including missing values, inabi
                                               nn <- length(declInfo$nodeFunctionNames)
                                               nfn <- declInfo$nodeFunctionNames[nn]
                                               nf <- .self$nodeFunctions[[nfn]]
-                                              context <- as.list(declInfo$unrolledIndicesMatrix[nrow(declInfo$unrolledIndicesMatrix), ])
+                                              #context <- as.list(declInfo$unrolledIndicesMatrix[nrow(declInfo$unrolledIndicesMatrix), ])
 
                                               if(declInfo$type == 'determ') {
                                                   # check LHS and RHS are same size/dim
-                                                  RHSsize = dimOrLength(eval(codeSubstitute(declInfo$valueExprReplaced, context)))
-                                                  LHSsize = dimOrLength(eval(codeSubstitute(declInfo$targetExprReplaced, context)))
+                                                  # need to eval within nf; constants not present otherwise
+                                                  RHSsize = dimOrLength(eval(codeSubstitute(declInfo$valueExprReplaced, as.list(nf))))
+                                                  LHSsize = dimOrLength(eval(codeSubstitute(declInfo$targetExprReplaced, as.list(nf))))
+                                                  # apparently implicit dropping of size 1 dimensions is ok in determ node calcs
+                                                  if(length(RHSsize) > 1 && any(RHSsize == 1))
+                                                      RHSsize <- RHSsize[RHSsize != 1]
+                                                  if(length(LHSsize) > 1 && any(LHSsize == 1))
+                                                      LHSsize <- LHSsize[LHSsize != 1]
+                                                   
                                                   if(!identical(LHSsize, RHSsize))
                                                       stop("Size/dimension mismatch between left-hand side and right-hand size of BUGS expression: ", deparse(declInfo$code))
                                               } else {
                                                   # check:
-                                                  #   1) dims of param args match those in distInputList
-                                                  #   2) sizes of vecs and row/column sizes all match for non-scalar quantities
-                                                  dist <- declInfo$valueExprReplaced[[1]]  
-                                                  tmp <- distributionsInputList[[deparse(dist)]]$types
+                                                  #   1) dims of param args match those in distInputList based on calculation
+                                                  #   2) dims of param args match those in distInputList based on varInfo
+                                                  #   3) sizes of vecs and row/column sizes all match for non-scalar quantities
+                                                  dist <- deparse(declInfo$valueExprReplaced[[1]])
+                                                  tmp <- distributionsInputList[[dist]]$types
                                                   
                                                   if(!is.null(tmp)) {
                                                       tmp <- strsplit(tmp, " = ")
@@ -581,14 +589,29 @@ Checks for common errors in model specification, including missing values, inabi
                                                               sizes[[nms[k]]] <- dimOrLength(e)
                                                           } else sizes[[nms[k]]] <- NA
                                                       }
+                                                      # check dimensions based on varInfo
+                                                      if(length(declInfo$targetExprReplaced) > 1) {
+                                                          LHSvar <- deparse(declInfo$targetExprReplaced[[2]])
+                                                      } else LHSvar <- deparse(declInfo$targetExprReplaced)
+                                                      if(md$varInfo[[LHSvar]]$nDim != distDims['value'])
+                                                          stop("Dimension of '", LHSvar, "' does not match required dimension for the distribution '", dist, "'. You may need to include explicit indexing information, e.g., ", LHSvar, "[1:10].")
+                                                      nms2 <- nms[nms%in%names(declInfo$valueExprReplaced)]
+                                                      for(k in seq_along(nms2)) {
+                                                          if(length(declInfo$valueExprReplaced[[nms2[k]]]) > 1) {
+                                                              var <- deparse(declInfo$valueExprReplaced[[nms2[k]]][[2]])
+                                                          } else var <- deparse(declInfo$valueExprReplaced[[nms2[k]]])
+                                                          if(md$varInfo[[var]]$nDim != distDims[nms2[k]])
+                                                              stop("Dimension of '", var, "' does not match required dimension for the distribution '", dist, "'. You may need to include explicit indexing information, e.g., ", var, "[1:10].")
+                                                      }
+                                                      
                                                       # actual dimensions
                                                       dims <- sapply(sizes, length)
-                                                      # check dimensions
+                                                      # check dimensions based on empirical size of variables
                                                       if(!identical(dims[!is.na(sizes)], distDims[!is.na(sizes)])) {
                                                           mismatches <- which(dims[!is.na(sizes)] != distDims[!is.na(sizes)])
-                                                          stop("Dimension of distribution argument(s) '", names(mismatches), "' does not match required dimensions for the distribution '", dist, "'. Necessary dimension(s) are ", distDims[mismatches], ".", ifelse(any(distDims[mismatches] == 1), " You may need to ensure that you have explicit vectors and not one-row or one-column matrices.", ""))
+                                                          stop("Dimension of distribution argument(s) '", names(mismatches), "' does not match required dimension(s) for the distribution '", dist, "'. Necessary dimension(s) are ", distDims[mismatches], ".", ifelse(any(distDims[mismatches] == 1), " You may need to ensure that you have explicit vectors and not one-row or one-column matrices.", ""))                                                          
                                                       }
-
+                                                      
                                                       # check sizes
                                                       mats <- dims == 2
                                                       vecs <- dims == 1
