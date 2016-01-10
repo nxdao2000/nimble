@@ -63,7 +63,9 @@ individualExportNames = c(
     'getDistribution',
     'calc_dmnormAltParams',
     'getDependencyPaths',
-    'buildConjugateSamplerFunctions'
+    'buildConjugateSamplerFunctions',
+ 'codeSubstitute'
+# 'distributionsInputList'
 )
 
 individualMaskedFunctions = c('mysource', 'individualMaskedFunctions', 'maskFileVector', 'AllFiles', 'maskSource', 'maskedFuns', 'individualExportNames', 'nfVar<-', 'getModelValuesMemberElement', 'newModelValues', 'testRows', 'individualExportClassNames',
@@ -196,7 +198,7 @@ individualMaskedFunctions = c('mysource', 'individualMaskedFunctions', 'maskFile
 
 maskFileVector = c(
 					'options.R',
-					'distributions_inputList.R',
+		#			'distributions_inputList.R',
 					 'distributions_processInputList.R',
 		#			 'distributions_implementations.R',
 
