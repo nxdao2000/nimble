@@ -537,7 +537,6 @@ MCMCsuiteClass <- setRefClass(
                 Cmcmc <- CmcmcFunctionList[[mcmcTag]]
                 if(setSeed) set.seed(0)
                 timeResult <- system.time({ Cmcmc$run(niter) })
-		output$Cmcmc <<-Cmcmc                
 		CmvSamples <- Cmcmc$mvSamples
                 samplesArray <- as.matrix(CmvSamples, varNames = monitorVars)
                 samplesArray <- samplesArray[(burnin+1):floor(niter/thin), monitorNodesNIMBLE, drop=FALSE]
