@@ -146,67 +146,67 @@
 #' @author Daniel Turek
 #' @export
 MCMC_CODESS <- function(
-                      code,
-            constants           = list(),
-            data                = list(),
-            inits               = list(),
-            monitors            = character(),
-            niter               = 10000,
-            burnin              = 2000,
-            thin                = 1,
-	    tuning		  = list(),
-            summaryStats        = c('mean', 'median', 'sd', 'CI95_low', 'CI95_upp'),
-            calculateEfficiency = FALSE,
-            MCMCs               = 'nimble',
-            MCMCdefs            = list(),
-	    targetNames        =list(),
-            winbugs_directory   = 'C:/WinBUGS14',
-            winbugs_program     = 'WinBUGS',
-            openbugs_directory  = 'C:/OpenBUGS323',
-            openbugs_program    = 'OpenBUGS',
-            stan_model          = '',
-            stan_inits          = NULL,
-            stan_data           = NULL,
-            stanNameMaps        = list(),
-            makePlot            = TRUE,
-            savePlot            = TRUE,
-            plotName            = 'MCMC_CODESS',
-            setSeed             = TRUE,
-            check               = getNimbleOption('checkModel'),
-            debug               = FALSE) {
-    ## aliased in MCMC_CODESSClass
-    CODESS <- MCMC_CODESSClass(code, constants, data, inits, monitors, niter, burnin, thin, tuning, summaryStats, calculateEfficiency,
-                            MCMCs, MCMCdefs, targetNames, winbugs_directory, winbugs_program, openbugs_directory, openbugs_program,
-                            stan_model, stan_inits, stan_data, stanNameMaps, makePlot, savePlot, plotName, setSeed,
-                            check, debug)
-    return(CODESS$output)
+  code,
+  constants           = list(),
+  data                = list(),
+  inits               = list(),
+  monitors            = character(),
+  niter               = 10000,
+  burnin              = 2000,
+  thin                = 1,
+  tuning		  = list(),
+  summaryStats        = c('mean', 'median', 'sd', 'CI95_low', 'CI95_upp'),
+  calculateEfficiency = FALSE,
+  MCMCs               = 'nimble',
+  MCMCdefs            = list(),
+  targetNames        =list(),
+  winbugs_directory   = 'C:/WinBUGS14',
+  winbugs_program     = 'WinBUGS',
+  openbugs_directory  = 'C:/OpenBUGS323',
+  openbugs_program    = 'OpenBUGS',
+  stan_model          = '',
+  stan_inits          = NULL,
+  stan_data           = NULL,
+  stanNameMaps        = list(),
+  makePlot            = TRUE,
+  savePlot            = TRUE,
+  plotName            = 'MCMC_CODESS',
+  setSeed             = TRUE,
+  check               = getNimbleOption('checkModel'),
+  debug               = FALSE) {
+  ## aliased in MCMC_CODESSClass
+  CODESS <- MCMC_CODESSClass(code, constants, data, inits, monitors, niter, burnin, thin, tuning, summaryStats, calculateEfficiency,
+                             MCMCs, MCMCdefs, targetNames, winbugs_directory, winbugs_program, openbugs_directory, openbugs_program,
+                             stan_model, stan_inits, stan_data, stanNameMaps, makePlot, savePlot, plotName, setSeed,
+                             check, debug)
+  return(CODESS$output)
 }
 
 codess<-function(x, tuning){
-          Nchain = round(length(x)/2)
-          N <- tuning$gridsize
-	  gridsize = c(N,N)
-	  bandwidth=c(tuning$bw, tuning$bw)
-	  range.x = tuning$range.x
-	  
-          est <- bkde2D(x, bandwidth=bandwidth, gridsize = gridsize, range.x = range.x)
-          K <- est$fhat
-          K <- t(K) 
-          for(j in 1:N) K[,j] <- K[,j] / sum(K[,j])
-          
-          ### Generating a chain for the discrete kernel
-          x <- est$x1
-          
-          discreteChainIndices <- integer(Nchain)
-          discreteChainIndices[1] <- round(length(x)/2)
-          for(i in 2:Nchain) {
-            discreteChainIndices[i] <- sample(1:N, 1,
-                                              prob = K[,discreteChainIndices[i-1]])
-          }
-          discreteChain <- x[discreteChainIndices]
-          #effectiveSize(discreteChain)
-	  
-          
+  Nchain = round(length(x)/2)
+  N <- tuning$gridsize
+  gridsize = c(N,N)
+  bandwidth=c(tuning$bw, tuning$bw)
+  range.x = tuning$range.x
+  
+  est <- bkde2D(x, bandwidth=bandwidth, gridsize = gridsize, range.x = range.x)
+  K <- est$fhat
+  K <- t(K) 
+  for(j in 1:N) K[,j] <- K[,j] / sum(K[,j])
+  
+  ### Generating a chain for the discrete kernel
+  x <- est$x1
+  
+  discreteChainIndices <- integer(Nchain)
+  discreteChainIndices[1] <- round(length(x)/2)
+  for(i in 2:Nchain) {
+    discreteChainIndices[i] <- sample(1:N, 1,
+                                      prob = K[,discreteChainIndices[i-1]])
+  }
+  discreteChain <- x[discreteChainIndices]
+  #effectiveSize(discreteChain)
+  
+  
 }
 
 
@@ -241,465 +241,538 @@ codess<-function(x, tuning){
 #' }
 #' 
 MCMC_CODESSClass <- setRefClass(
-
-    Class = 'MCMC_CODESSClass',
+  
+  Class = 'MCMC_CODESSClass',
+  
+  fields = list(
+    ## set in initialize()
+    code = 'ANY',   ## parsed expression for the model code; must be contained in { ... }    --- ORIGINAL ARGUMENT
+    constants = 'list',   ## list of the constants (ORIGINAL ARGUMENT)
+    data = 'list',   ## list of the data    --- ORIGINAL ARGUMENT
+    inits = 'list',  ## named list of initial values used for all MCMC algorithms    --- ORIGINAL ARGUMENT
+    constantsAndData = 'list',   ## data list used for WinBUGS, OpenBUGS, JAGS.  is equal to c(constantList, dataList)
+    Rmodel = 'ANY',   ## Rmodel object
     
-    fields = list(
-        ## set in initialize()
-        code = 'ANY',   ## parsed expression for the model code; must be contained in { ... }    --- ORIGINAL ARGUMENT
-        constants = 'list',   ## list of the constants (ORIGINAL ARGUMENT)
-	data = 'list',   ## list of the data    --- ORIGINAL ARGUMENT
-        inits = 'list',  ## named list of initial values used for all MCMC algorithms    --- ORIGINAL ARGUMENT
-        constantsAndData = 'list',   ## data list used for WinBUGS, OpenBUGS, JAGS.  is equal to c(constantList, dataList)
-        Rmodel = 'ANY',   ## Rmodel object
-        
-        ## setMonitors()
-        monitors = 'character',    ## the original character vector argument to initialize()    --- ORIGINAL ARGUMENT --- SLIGHTLY MODIFIED
-        
-	monitorVars = 'character',    ## character vector of VARIABLE names of parameters to save
-        monitorNodesNIMBLE = 'character',  ## character vector of the monitor node names, with spaces as in nimble: 'y[1, 1]'
-        monitorNodesBUGS = 'character',    ## same as monitorNodes, except for WinBUGS and OpenBUGS: no spaces in node names: 'y[1,1]'
-        nMonitorNodes = 'numeric',   ## number of monitorNodes
-        targetNames = 'list',        
-	
-        ## set in initialize()
-        niter = 'numeric',    ## number of MCMC iterations to run    --- ORIGINAL ARGUMENT
-        burnin = 'numeric',   ## burn-in period, the number of initial samples to discard, prior to thinning    --- ORIGINAL ARGUMENT
-        thin = 'numeric',   ## thinning interval    --- ORIGINAL ARGUMENT
-        tuning = 'list',	    ## tuning parameters for bkde2d
-	nkeep = 'numeric',   ## number of samples we'll keep. equal to (niter/thin - burnin)
-        burninFraction = 'numeric',  ## fraction of total sampling effort spent on burnin (burnin / (nkeep + burnin))
-        
-        ## setSummaryStats()
-        summaryStats = 'character',    ## character vector of parseable summary statistic functions    --- ORIGINAL ARGUMENT
-        calculateEfficiency = 'logical',   ## logical specifying whether to calculate ESS and Efficiency    --- ORIGINAL ARGUMENT
-        summaryStatFunctions = 'list',  ## list of the function objects for summary statistics
-        summaryStatDimNames = 'character',   ## character vector of the dimension names in output$summary
-        nSummaryStats = 'numeric',   ## the number of summary statistics
-        
-        ## setMCMCs()
-        MCMCs = 'character',   ## character vector of the MCMC analyses.  'winbugs', 'openbugs', 'jags', 'stan', or anything else is nimble    --- ORIGINAL ARGUMENT
-        winbugsMCMCflag = 'logical',   ## whether 'winbugs' is in MCMCs
-        openbugsMCMCflag = 'logical',   ## whether 'openbugs' is in MCMCs
-        jagsMCMCflag = 'logical',   ## whether 'jags' is in MCMCs
-        stanMCMCflag = 'logical',   ## whether 'stan' is in MCMCs
-        nimbleMCMCs = 'character',    ## the names of the remaining (presumably nimble) MCMCs
-        nNimbleMCMCs = 'numeric',    ## the number of remaining (nimble) MCMCs
-        nimbleMCMCflag = 'logical',   ## a flag indicating whether there are any remaining (nimble) MCMCs
-        nMCMCs = 'numeric',   ## the number of MCMC algorithms being ran
-        
-        ## setMCMCdefs()
-        MCMCdefs = 'list',   ## named list of {} expression code blocks, corresponding the setup for nimble MCMCs    --- ORIGINAL ARGUMENT --- SLIGHTLY MODIFIED
-        MCMCdefNames = 'character',   ## names of the MCMCdefs list
-        
-        ## set in initialize()
-        winbugs_directory = 'character',    ## directory for WinBUGS program    --- ORIGINAL ARGUMENT
-        winbugs_program = 'character',     ## program for WinBUGS    --- ORIGINAL ARGUMENT
-        openbugs_directory = 'character',    ## directory for OpenBUGS program    --- ORIGINAL ARGUMENT
-        openbugs_program = 'character',     ## program for OpenBUGS    --- ORIGINAL ARGUMENT
-        stan_model = 'character',     ## *.stan model file    --- ORIGINAL ARGUMENT
-        makePlot = 'logical',    ## whether to generate plots    --- ORIGINAL ARGUMENT
-        savePlot = 'logical',   ## whether or not to save plot PDFs    --- ORIGINAL ARGUMENT
-        plotName = 'character',     ## name of the file where we save density and trace plots    --- ORIGINAL ARGUMENT
-        setSeed = 'logical',   ## whether to setSeed(0) prior to running each algorithm    --- ORIGINAL ARGUMENT
-        debug = 'logical',   ## whether to enter browser() before running each algorithm    --- ORIGINAL ARGUMENT
-        modelFileName = 'character',     ## name of the text file where we write the model code, set to a fixed value
-
-        ## Maps with possible transformations from Stan to WinBUGS/OpenBUGS
-        ## e.g. for blocker: StanNameMaps <- list(tau = list(StanSourceName = 'sigmasq_delta', transform = function(x) 1/x)) ## transform can be omitted
-        StanNameMaps = 'ANY',
-        
-        ## set in run()
-        Cmodel = 'ANY',   ## compiled Cmodel object
-	RmcmcTargetList = 'list',    ## list of the R (nimble) MCMC functions
-        RmcmcFunctionList = 'list',    ## list of the R (nimble) MCMC functions
-        CmcmcFunctionList = 'list',    ## list of the C (nimble) MCMC functions
-        output = 'list'   ## list of numeric outputs: samples, summary, timing
-	
-    ),
+    ## setMonitors()
+    monitors = 'character',    ## the original character vector argument to initialize()    --- ORIGINAL ARGUMENT --- SLIGHTLY MODIFIED
     
-    methods = list(
+    monitorVars = 'character',    ## character vector of VARIABLE names of parameters to save
+    monitorNodesNIMBLE = 'character',  ## character vector of the monitor node names, with spaces as in nimble: 'y[1, 1]'
+    monitorNodesBUGS = 'character',    ## same as monitorNodes, except for WinBUGS and OpenBUGS: no spaces in node names: 'y[1,1]'
+    nMonitorNodes = 'numeric',   ## number of monitorNodes
+    targetNames = 'list',        
+    
+    ## set in initialize()
+    niter = 'numeric',    ## number of MCMC iterations to run    --- ORIGINAL ARGUMENT
+    burnin = 'numeric',   ## burn-in period, the number of initial samples to discard, prior to thinning    --- ORIGINAL ARGUMENT
+    thin = 'numeric',   ## thinning interval    --- ORIGINAL ARGUMENT
+    tuning = 'list',	    ## tuning parameters for bkde2d
+    nkeep = 'numeric',   ## number of samples we'll keep. equal to (niter/thin - burnin)
+    burninFraction = 'numeric',  ## fraction of total sampling effort spent on burnin (burnin / (nkeep + burnin))
+    
+    ## setSummaryStats()
+    summaryStats = 'character',    ## character vector of parseable summary statistic functions    --- ORIGINAL ARGUMENT
+    calculateEfficiency = 'logical',   ## logical specifying whether to calculate ESS and Efficiency    --- ORIGINAL ARGUMENT
+    summaryStatFunctions = 'list',  ## list of the function objects for summary statistics
+    summaryStatDimNames = 'character',   ## character vector of the dimension names in output$summary
+    nSummaryStats = 'numeric',   ## the number of summary statistics
+    
+    ## setMCMCs()
+    MCMCs = 'character',   ## character vector of the MCMC analyses.  'winbugs', 'openbugs', 'jags', 'stan', or anything else is nimble    --- ORIGINAL ARGUMENT
+    winbugsMCMCflag = 'logical',   ## whether 'winbugs' is in MCMCs
+    openbugsMCMCflag = 'logical',   ## whether 'openbugs' is in MCMCs
+    jagsMCMCflag = 'logical',   ## whether 'jags' is in MCMCs
+    stanMCMCflag = 'logical',   ## whether 'stan' is in MCMCs
+    nimbleMCMCs = 'character',    ## the names of the remaining (presumably nimble) MCMCs
+    nNimbleMCMCs = 'numeric',    ## the number of remaining (nimble) MCMCs
+    nimbleMCMCflag = 'logical',   ## a flag indicating whether there are any remaining (nimble) MCMCs
+    nMCMCs = 'numeric',   ## the number of MCMC algorithms being ran
+    
+    ## setMCMCdefs()
+    MCMCdefs = 'list',   ## named list of {} expression code blocks, corresponding the setup for nimble MCMCs    --- ORIGINAL ARGUMENT --- SLIGHTLY MODIFIED
+    MCMCdefNames = 'character',   ## names of the MCMCdefs list
+    
+    ## set in initialize()
+    winbugs_directory = 'character',    ## directory for WinBUGS program    --- ORIGINAL ARGUMENT
+    winbugs_program = 'character',     ## program for WinBUGS    --- ORIGINAL ARGUMENT
+    openbugs_directory = 'character',    ## directory for OpenBUGS program    --- ORIGINAL ARGUMENT
+    openbugs_program = 'character',     ## program for OpenBUGS    --- ORIGINAL ARGUMENT
+    stan_model = 'character',     ## *.stan model file    --- ORIGINAL ARGUMENT
+    makePlot = 'logical',    ## whether to generate plots    --- ORIGINAL ARGUMENT
+    savePlot = 'logical',   ## whether or not to save plot PDFs    --- ORIGINAL ARGUMENT
+    plotName = 'character',     ## name of the file where we save density and trace plots    --- ORIGINAL ARGUMENT
+    setSeed = 'logical',   ## whether to setSeed(0) prior to running each algorithm    --- ORIGINAL ARGUMENT
+    debug = 'logical',   ## whether to enter browser() before running each algorithm    --- ORIGINAL ARGUMENT
+    modelFileName = 'character',     ## name of the text file where we write the model code, set to a fixed value
+    
+    ## Maps with possible transformations from Stan to WinBUGS/OpenBUGS
+    ## e.g. for blocker: StanNameMaps <- list(tau = list(StanSourceName = 'sigmasq_delta', transform = function(x) 1/x)) ## transform can be omitted
+    StanNameMaps = 'ANY',
+    
+    ## set in run()
+    Cmodel = 'ANY',   ## compiled Cmodel object
+    RmcmcTargetList = 'list',    ## list of the R (nimble) MCMC functions
+    RmcmcFunctionList = 'list',    ## list of the R (nimble) MCMC functions
+    CmcmcFunctionList = 'list',    ## list of the C (nimble) MCMC functions
+    output = 'list'   ## list of numeric outputs: samples, summary, timing
+    
+  ),
+  
+  methods = list(
+    
+    initialize = function(
+      code,
+      constants           = list(),
+      data                = list(),
+      inits               = list(),
+      monitors            = character(),
+      niter               = 10000,
+      burnin              = 2000,
+      thin                = 1,
+      tuning		  = list(),
+      summaryStats        = c('mean', 'median', 'sd', 'CI95_low', 'CI95_upp'),
+      calculateEfficiency = FALSE,
+      MCMCs               = 'nimble',
+      MCMCdefs            = list(),
+      targetNames		= list(),
+      
+      winbugs_directory   = 'C:/WinBUGS14',
+      winbugs_program     = 'WinBUGS',
+      openbugs_directory  = 'C:/OpenBUGS323',
+      openbugs_program    = 'OpenBUGS',
+      stan_model          = '',
+      stan_inits          = NULL,
+      stan_data           = NULL,
+      stanNameMaps        = list(),
+      makePlot            = TRUE,
+      savePlot            = TRUE,
+      plotName            = 'MCMC_CODESS',
+      setSeed             = TRUE,
+      check               = getNimbleOption('checkModel'),
+      debug               = FALSE) {
+      
+      if(debug) browser()
+      code <<- code
+      constants <<- constants
+      data <<- data
+      inits <<- inits
+      constantsAndData <<- c(constants, data)
+      Rmodel <<- nimbleModel(code=code, constants=constants, data=data, inits=inits, check=check)
+      niter <<- niter
+      burnin <<- burnin
+      thin <<- thin
+      tuning <<- tuning
+      nkeep <<- floor(niter/thin) - burnin
+      burninFraction <<- burnin / (nkeep + burnin)
+      setMonitors(monitors)
+      targetNames <<-targetNames
+      setSummaryStats(summaryStats, calculateEfficiency)
+      setMCMCs(MCMCs)
+      setMCMCdefs(MCMCdefs)
+      winbugs_directory <<- winbugs_directory
+      winbugs_program <<- winbugs_program
+      openbugs_directory <<- openbugs_directory
+      openbugs_program <<- openbugs_program
+      stan_model <<- stan_model
+      if(is.null(stan_inits)) stan_inits <- gsub('stan$', 'init.R', stan_model)
+      if(is.null(stan_data))  stan_data  <- gsub('stan$', 'data.R', stan_model)
+      StanNameMaps <<- stanNameMaps
+      makePlot <<- makePlot
+      savePlot <<- savePlot
+      plotName <<- plotName
+      setSeed <<- setSeed
+      debug <<- debug
+      modelFileName <<- 'model.txt'
+      
+      ## run
+      checkMCMCdefNames()
+      init_output()
+      writeModelFile()
+      if(debug)              browser()
+      if(winbugsMCMCflag)    run_winbugs()
+      if(openbugsMCMCflag)   run_openbugs()
+      if(jagsMCMCflag)       run_jags()
+      if(stanMCMCflag)       run_stan(stan_data, stan_inits)
+      if(nimbleMCMCflag)     run_nimble()
+      unlink(modelFileName)
+      if(makePlot)           generate_plots()
+    },
+    
+    setMonitors = function(newMonitors) {
+      if(length(newMonitors) == 0) newMonitors <- Rmodel$getNodeNames(topOnly = TRUE, stochOnly = TRUE)
+      newMonitors <- Rmodel$expandNodeNames(newMonitors, returnScalarComponents = TRUE)
+      dataFlags <- unlist(lapply(newMonitors, function(mon) eval(parse(text=mon, keep.source=FALSE)[[1]], envir=Rmodel$isDataEnv)))
+      newMonitors <- newMonitors[!dataFlags]
+      monitors <<- newMonitors
+      monitorVars <<- unique(removeIndexing(monitors))
+      monitorNodesNIMBLE <<- monitors
+      monitorNodesBUGS <<- gsub(' ', '', monitorNodesNIMBLE)
+      nMonitorNodes <<- length(monitorNodesNIMBLE)
+    },
+    
+    setSummaryStats = function(summaryStats_arg, calculateEfficiency) {
+      calculateEfficiency <<- calculateEfficiency
+      if(calculateEfficiency) {
+        n <- length
+        ess <- effectiveSize
+        efficiency <- function(x) return(0)   ## placeholder; calculation done in addToOutput()
+        summaryStats_arg <- c(summaryStats_arg, 'n', 'ess', 'efficiency')
+      }
+      summaryStats <<- summaryStats_arg
+      CI95_low <- function(x) quantile(x, probs = 0.025)
+      CI95_upp <- function(x) quantile(x, probs = 0.975)
+      summaryStatFunctions <<- lapply(summaryStats, function(txt) eval(parse(text=txt)[[1]]))
+      summaryStatDimNames <<- gsub('function *\\(.*?\\)', '', summaryStats)
+      summaryStatDimNames <<- gsub('^ *', '', summaryStatDimNames)
+      nSummaryStats <<- length(summaryStats)
+    },
+    
+    setMCMCs = function(MCMCs) {
+      MCMCs <<- unique(MCMCs)
+      winbugsMCMCflag <<- 'winbugs' %in% MCMCs
+      openbugsMCMCflag <<- 'openbugs' %in% MCMCs
+      jagsMCMCflag <<- 'jags' %in% MCMCs
+      stanMCMCflag <<- 'stan' %in% MCMCs
+      nimbleMCMCs <<- setdiff(MCMCs, c('winbugs', 'openbugs', 'jags', 'stan'))
+      nNimbleMCMCs <<- length(nimbleMCMCs)
+      nimbleMCMCflag <<- if(nNimbleMCMCs > 0) TRUE else FALSE
+      nMCMCs <<- length(MCMCs)
+    },
+    
+    setMCMCdefs = function(newMCMCdefs) {
+      MCMCdefs <<- list(nimble        = quote(configureMCMC(Rmodel)),
+                        nimble_noConj = quote(configureMCMC(Rmodel, useConjugacy = FALSE)),
+                        nimble_RW     = quote(configureMCMC(Rmodel, onlyRW       = TRUE)),
+                        nimble_slice  = quote(configureMCMC(Rmodel, onlySlice    = TRUE)),
+                        autoBlock     = quote(configureMCMC(Rmodel, autoBlock    = TRUE)))
+      MCMCdefs[names(newMCMCdefs)] <<- newMCMCdefs
+      MCMCdefNames <<- names(MCMCdefs)
+    },
+    
+    init_output = function() {
+      samples <- list()
+      summary <- list()
+      timing <- rep(NA, nMCMCs+1)
+      names(timing) <- c(MCMCs, 'nimble_compile')
+      if(stanMCMCflag) timing['stan_compile'] <- NA
+      runParams <- c(niter = niter, burnin = burnin, thin = thin, nkeep = nkeep, burninFraction = burninFraction) 
+      initialOutput <- list(samples=samples, summary=summary, timing=timing, runParams = runParams)
+      if(calculateEfficiency) initialOutput$efficiency <- list()
+      output <<- initialOutput
+    },
+    
+    run_winbugs = function() {
+      if(setSeed) set.seed(0)
+      if(requireNamespace('R2WinBUGS', quietly = TRUE)) {
+        timeResult <- system.time({
+          winbugs_out <- R2WinBUGS::bugs(data=constantsAndData, inits=list(inits), parameters.to.save=monitorVars, model.file=modelFileName,
+                                         n.chains=1, n.iter=niter, n.burnin=0, n.thin=thin, bugs.directory=winbugs_directory, program=winbugs_program)
+        })
+        tempArray <- winbugs_out$sims.array[, 1, ]        ## must use sims.array
+        samplesArray <- tempArray[(burnin+1):floor(niter/thin), monitorNodesBUGS, drop=FALSE]
+        addToOutput('winbugs', samplesArray, timeResult)
+      } else warning("run_winbugs: R2WinBUGS package is required for 'winbugs' option.")
+    },
+    
+    run_openbugs = function() {
+      if(requireNamespace('R2WinBUGS', quietly = TRUE)) {
+        if(setSeed) set.seed(0)
+        timeResult <- system.time({
+          openbugs_out <- R2WinBUGS::bugs(data=constantsAndData, inits=list(inits), parameters.to.save=monitorVars, model.file=modelFileName,
+                                          n.chains=1, n.iter=niter, n.burnin=0, n.thin=thin, bugs.directory=openbugs_directory, program=openbugs_program)
+        })
+        tempArray <- openbugs_out$sims.array[, 1, ]        ## must use sims.array
+        samplesArray <- tempArray[(burnin+1):floor(niter/thin), monitorNodesBUGS, drop=FALSE]
+        addToOutput('openbugs', samplesArray, timeResult)
+      } else warning("run_openbugs: R2WinBUGS package is required for 'openbugs' option.")
+    },
+    
+    run_jags = function() {
+      if(setSeed) set.seed(0)
+      if(requireNamespace('rjags', quietly = TRUE)) {
+        jags_mod <- rjags::jags.model(file=modelFileName, data=constantsAndData, inits=inits, n.chains=1, quiet=FALSE)
+        timeResult <- system.time({
+          jags_out <- rjags::coda.samples(model=jags_mod, variable.names=monitorVars, n.iter=niter, thin=thin)
+        })
+        samplesArray <- jags_out[[1]][(burnin+1):floor(niter/thin), monitorNodesBUGS, drop=FALSE]
+        addToOutput('jags', samplesArray, timeResult)
+      } else warning("run_jags: rjags package is required for 'jags' option.")
+    },
+    
+    run_stan = function(dataFile, initFile) {
+      if(setSeed) set.seed(0)
+      if(require('rstan', quietly = TRUE)) {
+        if(stan_model == '') stop('must provide \'stan_model\' argument to run Stan MCMC')
+        ##            dataFile <- gsub('stan$', 'data.R', stan_model)
+        ##            initFile <- gsub('stan$', 'init.R', stan_model)
+        if(!is.list(dataFile)) 
+          constantsAndDataStan <- fileToList(dataFile)
+        else
+          constantsAndDataStan <- dataFile
         
-        initialize = function(
-            code,
-            constants           = list(),
-	    data                = list(),
-            inits               = list(),
-            monitors            = character(),
-            niter               = 10000,
-            burnin              = 2000,
-            thin                = 1,
-	    tuning		  = list(),
-            summaryStats        = c('mean', 'median', 'sd', 'CI95_low', 'CI95_upp'),
-            calculateEfficiency = FALSE,
-            MCMCs               = 'nimble',
-            MCMCdefs            = list(),
-	    targetNames		= list(),
-	                
-	    winbugs_directory   = 'C:/WinBUGS14',
-            winbugs_program     = 'WinBUGS',
-            openbugs_directory  = 'C:/OpenBUGS323',
-            openbugs_program    = 'OpenBUGS',
-            stan_model          = '',
-            stan_inits          = NULL,
-            stan_data           = NULL,
-            stanNameMaps        = list(),
-            makePlot            = TRUE,
-            savePlot            = TRUE,
-            plotName            = 'MCMC_CODESS',
-            setSeed             = TRUE,
-            check               = getNimbleOption('checkModel'),
-            debug               = FALSE) {
-            
-            if(debug) browser()
-            code <<- code
-            constants <<- constants
-            data <<- data
-            inits <<- inits
-            constantsAndData <<- c(constants, data)
-            Rmodel <<- nimbleModel(code=code, constants=constants, data=data, inits=inits, check=check)
-            niter <<- niter
-            burnin <<- burnin
-            thin <<- thin
-	    tuning <<- tuning
-            nkeep <<- floor(niter/thin) - burnin
-            burninFraction <<- burnin / (nkeep + burnin)
-            setMonitors(monitors)
-	    targetNames <<-targetNames
-	    setSummaryStats(summaryStats, calculateEfficiency)
-            setMCMCs(MCMCs)
-            setMCMCdefs(MCMCdefs)
-            winbugs_directory <<- winbugs_directory
-            winbugs_program <<- winbugs_program
-            openbugs_directory <<- openbugs_directory
-            openbugs_program <<- openbugs_program
-            stan_model <<- stan_model
-            if(is.null(stan_inits)) stan_inits <- gsub('stan$', 'init.R', stan_model)
-            if(is.null(stan_data))  stan_data  <- gsub('stan$', 'data.R', stan_model)
-            StanNameMaps <<- stanNameMaps
-            makePlot <<- makePlot
-            savePlot <<- savePlot
-            plotName <<- plotName
-            setSeed <<- setSeed
-            debug <<- debug
-            modelFileName <<- 'model.txt'
-
-            ## run
-            checkMCMCdefNames()
-            init_output()
-            writeModelFile()
-            if(debug)              browser()
-            if(winbugsMCMCflag)    run_winbugs()
-            if(openbugsMCMCflag)   run_openbugs()
-            if(jagsMCMCflag)       run_jags()
-            if(stanMCMCflag)       run_stan(stan_data, stan_inits)
-            if(nimbleMCMCflag)     run_nimble()
-            unlink(modelFileName)
-            if(makePlot)           generate_plots()
-        },
+        if(!is.list(initFile)) {
+          if(file.exists(initFile))
+            initsStan <- fileToList(initFile)
+          else
+            initsStan <- NULL
+        } else
+          initsStan <- initFile
         
-        setMonitors = function(newMonitors) {
-            if(length(newMonitors) == 0) newMonitors <- Rmodel$getNodeNames(topOnly = TRUE, stochOnly = TRUE)
-            newMonitors <- Rmodel$expandNodeNames(newMonitors, returnScalarComponents = TRUE)
-            dataFlags <- unlist(lapply(newMonitors, function(mon) eval(parse(text=mon, keep.source=FALSE)[[1]], envir=Rmodel$isDataEnv)))
-            newMonitors <- newMonitors[!dataFlags]
-            monitors <<- newMonitors
-            monitorVars <<- unique(removeIndexing(monitors))
-            monitorNodesNIMBLE <<- monitors
-            monitorNodesBUGS <<- gsub(' ', '', monitorNodesNIMBLE)
-            nMonitorNodes <<- length(monitorNodesNIMBLE)
-        },
         
-        setSummaryStats = function(summaryStats_arg, calculateEfficiency) {
-            calculateEfficiency <<- calculateEfficiency
-            if(calculateEfficiency) {
-                n <- length
-                ess <- effectiveSize
-		efficiency <- function(x) return(0)   ## placeholder; calculation done in addToOutput()
-                summaryStats_arg <- c(summaryStats_arg, 'n', 'ess', 'efficiency')
-            }
-            summaryStats <<- summaryStats_arg
-            CI95_low <- function(x) quantile(x, probs = 0.025)
-            CI95_upp <- function(x) quantile(x, probs = 0.975)
-            summaryStatFunctions <<- lapply(summaryStats, function(txt) eval(parse(text=txt)[[1]]))
-            summaryStatDimNames <<- gsub('function *\\(.*?\\)', '', summaryStats)
-            summaryStatDimNames <<- gsub('^ *', '', summaryStatDimNames)
-            nSummaryStats <<- length(summaryStats)
-        },
+        timeResult <- system.time(stan_mod <- rstan::stan_model(file = stan_model))
+        addTimeResult('stan_compile', timeResult)
         
-        setMCMCs = function(MCMCs) {
-            MCMCs <<- unique(MCMCs)
-            winbugsMCMCflag <<- 'winbugs' %in% MCMCs
-            openbugsMCMCflag <<- 'openbugs' %in% MCMCs
-            jagsMCMCflag <<- 'jags' %in% MCMCs
-            stanMCMCflag <<- 'stan' %in% MCMCs
-            nimbleMCMCs <<- setdiff(MCMCs, c('winbugs', 'openbugs', 'jags', 'stan'))
-            nNimbleMCMCs <<- length(nimbleMCMCs)
-            nimbleMCMCflag <<- if(nNimbleMCMCs > 0) TRUE else FALSE
-            nMCMCs <<- length(MCMCs)
-        },
-        
-        setMCMCdefs = function(newMCMCdefs) {
-            MCMCdefs <<- list(nimble        = quote(configureMCMC(Rmodel)),
-                              nimble_noConj = quote(configureMCMC(Rmodel, useConjugacy = FALSE)),
-                              nimble_RW     = quote(configureMCMC(Rmodel, onlyRW       = TRUE)),
-                              nimble_slice  = quote(configureMCMC(Rmodel, onlySlice    = TRUE)),
-                              autoBlock     = quote(configureMCMC(Rmodel, autoBlock    = TRUE)))
-            MCMCdefs[names(newMCMCdefs)] <<- newMCMCdefs
-            MCMCdefNames <<- names(MCMCdefs)
-        },
-        
-        init_output = function() {
-            samples <- array(NA, dim = c(nMCMCs, nMonitorNodes, nkeep))
-            dimnames(samples) <- list(MCMCs, monitorNodesNIMBLE, NULL)
-            summary <- array(NA, dim = c(nMCMCs, nSummaryStats, nMonitorNodes))
-            dimnames(summary) <- list(MCMCs, summaryStatDimNames, monitorNodesNIMBLE)
-            timing <- rep(NA, nMCMCs+1)
-	    names(timing) <- c(MCMCs, 'nimble_compile')
-            if(stanMCMCflag) timing['stan_compile'] <- NA
-            runParams <- c(niter = niter, burnin = burnin, thin = thin, nkeep = nkeep, burninFraction = burninFraction) 
-            initialOutput <- list(samples=samples, summary=summary, timing=timing, runParams = runParams)
-            if(calculateEfficiency) initialOutput$efficiency <- list(min=NA, mean=NA)
-            output <<- initialOutput
-        },
-        
-        run_winbugs = function() {
-            if(setSeed) set.seed(0)
-            if(requireNamespace('R2WinBUGS', quietly = TRUE)) {
-                timeResult <- system.time({
-                                              winbugs_out <- R2WinBUGS::bugs(data=constantsAndData, inits=list(inits), parameters.to.save=monitorVars, model.file=modelFileName,
-                                                                             n.chains=1, n.iter=niter, n.burnin=0, n.thin=thin, bugs.directory=winbugs_directory, program=winbugs_program)
-                                          })
-                tempArray <- winbugs_out$sims.array[, 1, ]        ## must use sims.array
-                samplesArray <- tempArray[(burnin+1):floor(niter/thin), monitorNodesBUGS, drop=FALSE]
-                addToOutput('winbugs', samplesArray, timeResult)
-            } else warning("run_winbugs: R2WinBUGS package is required for 'winbugs' option.")
-        },
-        
-        run_openbugs = function() {
-            if(requireNamespace('R2WinBUGS', quietly = TRUE)) {
-                if(setSeed) set.seed(0)
-                timeResult <- system.time({
-                                              openbugs_out <- R2WinBUGS::bugs(data=constantsAndData, inits=list(inits), parameters.to.save=monitorVars, model.file=modelFileName,
-                                                                              n.chains=1, n.iter=niter, n.burnin=0, n.thin=thin, bugs.directory=openbugs_directory, program=openbugs_program)
-                                          })
-                tempArray <- openbugs_out$sims.array[, 1, ]        ## must use sims.array
-                samplesArray <- tempArray[(burnin+1):floor(niter/thin), monitorNodesBUGS, drop=FALSE]
-                addToOutput('openbugs', samplesArray, timeResult)
-            } else warning("run_openbugs: R2WinBUGS package is required for 'openbugs' option.")
-        },
-        
-        run_jags = function() {
-            if(setSeed) set.seed(0)
-            if(requireNamespace('rjags', quietly = TRUE)) {
-                jags_mod <- rjags::jags.model(file=modelFileName, data=constantsAndData, inits=inits, n.chains=1, quiet=FALSE)
-                timeResult <- system.time({
-                                              jags_out <- rjags::coda.samples(model=jags_mod, variable.names=monitorVars, n.iter=niter, thin=thin)
-                                          })
-                samplesArray <- jags_out[[1]][(burnin+1):floor(niter/thin), monitorNodesBUGS, drop=FALSE]
-                addToOutput('jags', samplesArray, timeResult)
-            } else warning("run_jags: rjags package is required for 'jags' option.")
-        },
-
-        run_stan = function(dataFile, initFile) {
-            if(setSeed) set.seed(0)
-            if(require('rstan', quietly = TRUE)) {
-                if(stan_model == '') stop('must provide \'stan_model\' argument to run Stan MCMC')
-                ##            dataFile <- gsub('stan$', 'data.R', stan_model)
-                ##            initFile <- gsub('stan$', 'init.R', stan_model)
-                if(!is.list(dataFile)) 
-                    constantsAndDataStan <- fileToList(dataFile)
-                else
-                    constantsAndDataStan <- dataFile
-                
-                if(!is.list(initFile)) {
-                    if(file.exists(initFile))
-                        initsStan <- fileToList(initFile)
-                    else
-                        initsStan <- NULL
-                } else
-                    initsStan <- initFile
-
-                
-                timeResult <- system.time(stan_mod <- rstan::stan_model(file = stan_model))
-                addTimeResult('stan_compile', timeResult)
-                        
-                if(is.null(initsStan)) {
-                    ## missing model.init.R file (stan inits file)
-                    timeResult <- system.time(stan_out <- rstan::sampling(stan_mod, data=constantsAndDataStan, chains=1, iter=niter, thin=thin))
-                } else {
-                      ## we have the model.init.R file
-                      ## this one includes inits = ...
-                      timeResult <- system.time(stan_out <- rstan::sampling(stan_mod, data=constantsAndDataStan, chains=1, iter=niter, thin=thin, init=list(initsStan)))
-                  }
-                
-                tempArray <- rstan::extract(stan_out, permuted = FALSE, inc_warmup = TRUE)[, 1, ]
-                for(BUGSname in names(StanNameMaps)) {
-                    iCol <- which(StanNameMaps[[BUGSname]]$StanSourceName == colnames(tempArray))
-                    if(length(iCol)==1) {
-                        if(!is.null(StanNameMaps[[BUGSname]]$transform))
-                            tempArray[,iCol] <- StanNameMaps[[BUGSname]]$transform(tempArray[,iCol])
-                        colnames(tempArray)[iCol] <- BUGSname
-                    }
-                }
-                dimnames(tempArray)[[2]] <- gsub('_', '.', dimnames(tempArray)[[2]])
-                if(!all(monitorNodesBUGS %in% dimnames(tempArray)[[2]])) {
-                    missingNames <- setdiff(monitorNodesBUGS, dimnames(tempArray)[[2]])
-                    warning(paste0('Stan output is missing values for: ', paste0(missingNames,collapse=', ')))
-                }
-                samplesArray <- array(0, dim = c(nkeep, length(monitorNodesBUGS)))
-                dimnames(samplesArray)[[2]] <- monitorNodesBUGS
-                monitorsWeHave <- intersect(monitorNodesBUGS, dimnames(tempArray)[[2]])
-                samplesArray[, monitorsWeHave] <- tempArray[(burnin+1):floor(niter/thin), monitorsWeHave, drop=FALSE]
-                addToOutput('stan', samplesArray, timeResult)
-            } else warning("run_stan: rstan package is required for 'stan' option.")
-        },
-            
-        run_nimble = function() {
-            for(iMCMC in seq_along(nimbleMCMCs)) {
-                mcmcTag <- nimbleMCMCs[iMCMC]
-                mcmcDef <- MCMCdefs[[mcmcTag]]
-                mcmcConf <- eval(mcmcDef)
-                mcmcConf$addMonitors(monitorVars, print = FALSE)
-		RmcmcTargetList[[iMCMC]] <<- mcmcConf$findSamplersOnNodes(targetNames[[1]])
-                mcmcConf$setThin(thin, print = FALSE)
-                RmcmcFunctionList[[mcmcTag]] <<- buildMCMC(mcmcConf)
-            }
-            timeResult <- system.time({
-                Cmodel <<- compileNimble(Rmodel)
-                CmcmcFunctionList_temp <- compileNimble(RmcmcFunctionList, project = Rmodel)
-                if(nNimbleMCMCs == 1) { CmcmcFunctionList[[nimbleMCMCs[1]]] <<- CmcmcFunctionList_temp
-                } else                { CmcmcFunctionList                   <<- CmcmcFunctionList_temp }
-            })
-            addTimeResult('nimble_compile', timeResult)
-            output$targetNames<<-targetNames
-            output$TargetList <<- RmcmcTargetList
-	    
-	    for(iMCMC in seq_along(nimbleMCMCs)) {
-                Cmodel$setInits(inits);     calculate(Cmodel)
-                mcmcTag <- nimbleMCMCs[iMCMC]
-                Cmcmc <- CmcmcFunctionList[[mcmcTag]]
-                if(setSeed) set.seed(0)
-                Cmcmc$run(niter, time = TRUE)
-		timeResults <-Cmcmc$getTimes()
-		timeEach  <- rep(timeResult[3], length(monitorVars))
-		CmvSamples <- Cmcmc$mvSamples
-                samplesArray <- as.matrix(CmvSamples, varNames = monitorVars)
-                
-		if (length(RmcmcTargetList[[iMCMC]])>0){
-		    for (i in 1 : length(RmcmcTargetList[[iMCMC]])){
-
-			beforeSamples <- Cmcmc$samplerFunctions$contentsList[[RmcmcTargetList[[iMCMC]][i]]]$before
-			afterSamples <- Cmcmc$samplerFunctions$contentsList[[RmcmcTargetList[[iMCMC]][i]]]$after
-          		x = cbind(beforeSamples, afterSamples)
-			samplesArray <- cbind(samplesArray, codess(x=x, tuning=tuning))
-			monitorVars <<- c(monitorVars, paste(mcmcTag, RmcmcTargetList[[iMCMC]][i] ))
-			timeEach <- c(timeEach, timeResults[[RmcmcTargetList[[iMCMC]][i]]])
-			
-		    }
-		    monitorNodesNIMBLE <<- monitorVars
-		    nMonitorNodes <<- length(monitorVars)
-		    init_output()
-            
-		}
-	
-                samplesArray <- samplesArray[(burnin+1):floor(niter/thin), , drop=FALSE]
-                
-		addToOutput(mcmcTag, samplesArray, timeEach)
-            }
-        },
-        
-        addToOutput = function(MCMCtag, samplesArray, timeEach) {
-            output$samples[MCMCtag, , ] <<- t(samplesArray) ## makes dim1:monitors, and dim2:iter
-            addTimeResult(MCMCtag, timeEach)
-	    summaryArray <- array(NA, c(nSummaryStats, nMonitorNodes))
-            for(iStat in seq_along(summaryStats)) {
-                summaryArray[iStat, ] <- apply(samplesArray, 2, summaryStatFunctions[[iStat]])
-		
-            }
-	    if(calculateEfficiency) {
-                for (i in 1 : nMonitorNodes){
-			essDim <- which(summaryStatDimNames == 'ess')
-			effDim <- which(summaryStatDimNames == 'efficiency')
-			thisTime <- timeEach[i]
-			summaryArray[effDim,i ] <- summaryArray[essDim,i] / thisTime
-		}
-            
-            }
-            output$summary[MCMCtag, , ] <<- summaryArray
-            if(calculateEfficiency) {
-                output$efficiency$min  <<- apply(output$summary[, 'efficiency', , drop=FALSE], 1, min)
-                output$efficiency$mean <<- apply(output$summary[, 'efficiency', , drop=FALSE], 1, mean)
-	    }
-        },
-        
-        addTimeResult = function(MCMCtag, timeEach) {
-            output$timing[MCMCtag] <<- timeEach[1]
-        },
-        
-        generate_plots = function() {
-            cols <- c(2:6, 8:9)
-            if(nMCMCs > length(cols))    { message('too many MCMCs to plot'); return() }
-            
-            ## for each monitorNode, generate traceplot for each MCMC
-            for(monitorNode in monitorNodesNIMBLE) {
-                dev.new()
-                par(mfrow=c(nMCMCs,1), mar=c(3,3,2,1), mgp=c(0,0.6,0), tcl=-0.3)
-                for(i in seq_along(MCMCs)) {
-                    plot(x=1:nkeep, y=output$samples[MCMCs[i], monitorNode, ],
-                         main=paste0(monitorNode, ' traceplot:  ', MCMCs[i]),
-                         type='l', col=cols[i], , xlab='', ylab='', xaxt='n', bty='l') }
-                filename <- paste0(plotName, '_traceplots_', monitorNode, '.pdf')
-                if(savePlot)   { dev.print(device = pdf, file = filename) }
-            }
-            
-            ## density plots
-            dev.new()
-            par(mfrow = c(nMonitorNodes,1), mar=c(3,3,2,1), mgp=c(0,0.6,0), tcl=-0.3)
-            for(monitorNode in monitorNodesNIMBLE) {
-                densityList <- apply(output$samples[, monitorNode, , drop=FALSE], 1, density)
-                xlim <- range(unlist(lapply(densityList, function(d) d$x)))
-                xlim <- mean(xlim) + (xlim-mean(xlim)) * 1.1
-                ymax <- max(unlist(lapply(densityList, function(d) d$y))) * 1.1
-                plot(-100, -100, xlim=xlim, ylim=c(0,ymax),
-                     main=paste0('posterior density:  ', monitorNode),
-                     xlab='', ylab='', yaxt='n', bty='n')
-                legend(x='topleft', legend=MCMCs, lty=1, lwd=2, col=cols[1:nMCMCs], bty='n')
-                for(i in seq_along(MCMCs))     polygon(densityList[[i]], border=cols[i])
-                abline(h=0, col='white')
-            }
-            filename <- paste0(plotName, '_densities.pdf')
-            if(savePlot)   { dev.print(device = pdf, file = filename) }
-        },
-        
-        checkMCMCdefNames = function() {
-            if(!all(nimbleMCMCs %in% MCMCdefNames)) stop(paste0('missing MCMCdefs for: ', paste0(setdiff(nimbleMCMCs, MCMCdefNames), collapse=', ')))
-        },
-        
-        writeModelFile = function() {
-            writeLines(paste0('model\n', paste0(deparse(code), collapse='\n')), con=modelFileName)
-        },
-
-        fileToList = function(file) {
-            if(!file.exists(file)) {
-                warning(paste0('missing Stan input file: \'', file, '\''))
-                return(NULL)
-            }
-            env <- new.env()
-            source(file, local = env)
-            lst <- list()
-            for(name in ls(env))   lst[[name]] <- get(name, env)
-            return(lst)
-        },
-        
-        show = function() {
-            cat(paste0('MCMC_CODESS object\n',
-                       'algorithms:  ', paste0(MCMCs, collapse=', '), '\n',
-                       'monitors:  ', paste0(monitorNodesNIMBLE, collapse=', '), '\n',
-                       'model code:\n',
-                       paste0(deparse(model), collapse='\n')))
+        if(is.null(initsStan)) {
+          ## missing model.init.R file (stan inits file)
+          timeResult <- system.time(stan_out <- rstan::sampling(stan_mod, data=constantsAndDataStan, chains=1, iter=niter, thin=thin))
+        } else {
+          ## we have the model.init.R file
+          ## this one includes inits = ...
+          timeResult <- system.time(stan_out <- rstan::sampling(stan_mod, data=constantsAndDataStan, chains=1, iter=niter, thin=thin, init=list(initsStan)))
         }
-    )
+        
+        tempArray <- rstan::extract(stan_out, permuted = FALSE, inc_warmup = TRUE)[, 1, ]
+        for(BUGSname in names(StanNameMaps)) {
+          iCol <- which(StanNameMaps[[BUGSname]]$StanSourceName == colnames(tempArray))
+          if(length(iCol)==1) {
+            if(!is.null(StanNameMaps[[BUGSname]]$transform))
+              tempArray[,iCol] <- StanNameMaps[[BUGSname]]$transform(tempArray[,iCol])
+            colnames(tempArray)[iCol] <- BUGSname
+          }
+        }
+        dimnames(tempArray)[[2]] <- gsub('_', '.', dimnames(tempArray)[[2]])
+        if(!all(monitorNodesBUGS %in% dimnames(tempArray)[[2]])) {
+          missingNames <- setdiff(monitorNodesBUGS, dimnames(tempArray)[[2]])
+          warning(paste0('Stan output is missing values for: ', paste0(missingNames,collapse=', ')))
+        }
+        samplesArray <- array(0, dim = c(nkeep, length(monitorNodesBUGS)))
+        dimnames(samplesArray)[[2]] <- monitorNodesBUGS
+        monitorsWeHave <- intersect(monitorNodesBUGS, dimnames(tempArray)[[2]])
+        samplesArray[, monitorsWeHave] <- tempArray[(burnin+1):floor(niter/thin), monitorsWeHave, drop=FALSE]
+        addToOutput('stan', samplesArray, timeResult)
+      } else warning("run_stan: rstan package is required for 'stan' option.")
+    },
+    
+    run_nimble = function() {
+      for(iMCMC in seq_along(nimbleMCMCs)) {
+        mcmcTag <- nimbleMCMCs[iMCMC]
+        mcmcDef <- MCMCdefs[[mcmcTag]]
+        mcmcConf <- eval(mcmcDef)
+        RmcmcTargetList[[iMCMC]] <<- mcmcConf$findSamplersOnNodes(targetNames[[1]])
+        mcmcConf$addMonitors(monitorVars, print = FALSE)
+        mcmcConf$setThin(thin, print = FALSE)
+        RmcmcFunctionList[[mcmcTag]] <<- buildMCMC(mcmcConf)
+      }
+      timeResult <- system.time({
+        Cmodel <<- compileNimble(Rmodel)
+        CmcmcFunctionList_temp <- compileNimble(RmcmcFunctionList, project = Rmodel)
+        if(nNimbleMCMCs == 1) { CmcmcFunctionList[[nimbleMCMCs[1]]] <<- CmcmcFunctionList_temp
+        } else                { CmcmcFunctionList                   <<- CmcmcFunctionList_temp }
+      })
+      addTimeResult('nimble_compile', timeResult)
+      
+      for(iMCMC in seq_along(nimbleMCMCs)) {
+        Cmodel$setInits(inits);     calculate(Cmodel)
+        mcmcTag <- nimbleMCMCs[iMCMC]
+        Cmcmc <- CmcmcFunctionList[[mcmcTag]]
+        if(setSeed) set.seed(0)
+        if (length(RmcmcTargetList[[iMCMC]])>0){
+          monitorVars1 <- monitorVars
+          for (i in 1 : length(RmcmcTargetList[[iMCMC]])){
+            
+            monitorVars1 <- c(monitorVars1, paste(mcmcTag, RmcmcTargetList[[iMCMC]][i],sep = "" ))
+            
+          }
+          monitorNodesNIMBLE <<- monitorVars1
+          nMonitorNodes <<- length(monitorVars1)
+          
+          
+        }
+        
+        Cmcmc$run(niter, time = TRUE)
+        timeResults <-Cmcmc$getTimes()
+        timeEach  <- rep(timeResult[3], length(monitorVars))
+        
+        CmvSamples <- Cmcmc$mvSamples
+        samplesArray <- as.matrix(CmvSamples, varNames = monitorVars)
+        
+        if (length(RmcmcTargetList[[iMCMC]])>0){
+          for (i in 1 : length(RmcmcTargetList[[iMCMC]])){
+            
+            beforeSamples <- Cmcmc$samplerFunctions$contentsList[[RmcmcTargetList[[iMCMC]][i]]]$before
+            afterSamples <- Cmcmc$samplerFunctions$contentsList[[RmcmcTargetList[[iMCMC]][i]]]$after
+            x = cbind(beforeSamples, afterSamples)
+            samplesArray <- cbind(samplesArray, codess(x=x, tuning=tuning))
+            timeEach <- c(timeEach, timeResults[[RmcmcTargetList[[iMCMC]][i]]])
+            
+            
+          }
+          
+          
+        }
+        samplesArray <- samplesArray[(burnin+1):floor(niter/thin), , drop=FALSE]
+        addToOutput(mcmcTag, samplesArray, timeEach)
+      }
+#       for(iMCMC in seq_along(nimbleMCMCs)) {
+#         mcmcTag <- nimbleMCMCs[iMCMC]
+#         mcmcDef <- MCMCdefs[[mcmcTag]]
+#         mcmcConf <- eval(mcmcDef)
+#         mcmcConf$addMonitors(monitorVars, print = FALSE)
+#         RmcmcTargetList[[iMCMC]] <<- mcmcConf$findSamplersOnNodes(targetNames[[1]])
+#         mcmcConf$setThin(thin, print = FALSE)
+#         RmcmcFunctionList[[mcmcTag]] <<- buildMCMC(mcmcConf)
+#       }
+#       timeResult <- system.time({
+#         Cmodel <<- compileNimble(Rmodel)
+#         CmcmcFunctionList_temp <- compileNimble(RmcmcFunctionList, project = Rmodel)
+#         if(nNimbleMCMCs == 1) { CmcmcFunctionList[[nimbleMCMCs[1]]] <<- CmcmcFunctionList_temp
+#         } else                { CmcmcFunctionList                   <<- CmcmcFunctionList_temp }
+#       })
+#       addTimeResult('nimble_compile', timeResult)
+#       output$targetNames<<-targetNames
+#       output$TargetList <<- RmcmcTargetList
+#       
+#       for(iMCMC in seq_along(nimbleMCMCs)) {
+#         Cmodel$setInits(inits);     calculate(Cmodel)
+#         mcmcTag <- nimbleMCMCs[iMCMC]
+#         Cmcmc <- CmcmcFunctionList[[mcmcTag]]
+#         if(setSeed) set.seed(0)
+#         if (length(RmcmcTargetList[[iMCMC]])>0){
+#           monitorVars1 <- monitorVars
+#           for (i in 1 : length(RmcmcTargetList[[iMCMC]])){
+#             
+#             monitorVars1 <- c(monitorVars1, paste(mcmcTag, RmcmcTargetList[[iMCMC]][i] ))
+#             
+#           }
+#           monitorNodesNIMBLE <<- monitorVars1
+#           nMonitorNodes <<- length(monitorVars1)
+#           init_output()
+#           
+#         }
+#         
+#         Cmcmc$run(niter, time = TRUE)
+#         timeResults <-Cmcmc$getTimes()
+#         timeEach  <- rep(timeResult[3], length(monitorVars))
+#         
+#         
+#         CmvSamples <- Cmcmc$mvSamples
+#         samplesArray <- as.matrix(CmvSamples, varNames = monitorVars)
+#         
+#         if (length(RmcmcTargetList[[iMCMC]])>0){
+#           for (i in 1 : length(RmcmcTargetList[[iMCMC]])){
+#             
+#             beforeSamples <- Cmcmc$samplerFunctions$contentsList[[RmcmcTargetList[[iMCMC]][i]]]$before
+#             afterSamples <- Cmcmc$samplerFunctions$contentsList[[RmcmcTargetList[[iMCMC]][i]]]$after
+#             x = cbind(beforeSamples, afterSamples)
+#             samplesArray <- cbind(samplesArray, codess(x=x, tuning=tuning))
+#             
+#              timeEach <- c(timeEach, timeResults[[RmcmcTargetList[[iMCMC]][i]]])
+#             
+#             
+#           }
+#           
+#           
+#         }
+#         
+#         samplesArray <- samplesArray[(burnin+1):floor(niter/thin), , drop=FALSE]
+#         output$samplesArray[iMCMC]<<-samplesArray
+#         addToOutput(mcmcTag, samplesArray, timeEach)
+#       }
+    },
+    
+    addToOutput = function(MCMCtag, samplesArray, timeEach) {
+      output$samples[[MCMCtag]] <<- t(samplesArray) ## makes dim1:monitors, and dim2:iter
+      addTimeResult(MCMCtag, timeEach)
+      summaryArray <- array(NA, c(nSummaryStats, nMonitorNodes))
+      dimnames(summaryArray) <- list(summaryStatDimNames, monitorNodesNIMBLE)
+      
+      for(iStat in seq_along(summaryStats)) {
+        summaryArray[iStat, ] <- apply(samplesArray, 2, summaryStatFunctions[[iStat]])
+        
+      }
+      if(calculateEfficiency) {
+        for (i in 1 : nMonitorNodes){
+          essDim <- which(summaryStatDimNames == 'ess')
+          effDim <- which(summaryStatDimNames == 'efficiency')
+          thisTime <- timeEach[i]
+          summaryArray[effDim,i ] <- summaryArray[essDim,i] / thisTime
+        }
+        
+      }
+      output$summary[[MCMCtag]] <<- summaryArray
+      if(calculateEfficiency) {
+        output$efficiency[[MCMCtag]]$min  <<- min(summaryArray[effDim,] )
+        output$efficiency[[MCMCtag]]$mean <<- mean(summaryArray[effDim,] )
+      }
+    },
+    
+    addTimeResult = function(MCMCtag, timeEach) {
+      output$timing[MCMCtag] <<- timeEach[1]
+    },
+    
+    generate_plots = function() {
+      cols <- c(2:6, 8:9)
+      if(nMCMCs > length(cols))    { message('too many MCMCs to plot'); return() }
+      
+      ## for each monitorNode, generate traceplot for each MCMC
+      for(monitorNode in monitorNodesNIMBLE) {
+        dev.new()
+        par(mfrow=c(nMCMCs,1), mar=c(3,3,2,1), mgp=c(0,0.6,0), tcl=-0.3)
+        for(i in seq_along(MCMCs)) {
+          plot(x=1:nkeep, y=output$samples[MCMCs[i], monitorNode, ],
+               main=paste0(monitorNode, ' traceplot:  ', MCMCs[i]),
+               type='l', col=cols[i], , xlab='', ylab='', xaxt='n', bty='l') }
+        filename <- paste0(plotName, '_traceplots_', monitorNode, '.pdf')
+        if(savePlot)   { dev.print(device = pdf, file = filename) }
+      }
+      
+      ## density plots
+      dev.new()
+      par(mfrow = c(nMonitorNodes,1), mar=c(3,3,2,1), mgp=c(0,0.6,0), tcl=-0.3)
+      for(monitorNode in monitorNodesNIMBLE) {
+        densityList <- apply(output$samples[, monitorNode, , drop=FALSE], 1, density)
+        xlim <- range(unlist(lapply(densityList, function(d) d$x)))
+        xlim <- mean(xlim) + (xlim-mean(xlim)) * 1.1
+        ymax <- max(unlist(lapply(densityList, function(d) d$y))) * 1.1
+        plot(-100, -100, xlim=xlim, ylim=c(0,ymax),
+             main=paste0('posterior density:  ', monitorNode),
+             xlab='', ylab='', yaxt='n', bty='n')
+        legend(x='topleft', legend=MCMCs, lty=1, lwd=2, col=cols[1:nMCMCs], bty='n')
+        for(i in seq_along(MCMCs))     polygon(densityList[[i]], border=cols[i])
+        abline(h=0, col='white')
+      }
+      filename <- paste0(plotName, '_densities.pdf')
+      if(savePlot)   { dev.print(device = pdf, file = filename) }
+    },
+    
+    checkMCMCdefNames = function() {
+      if(!all(nimbleMCMCs %in% MCMCdefNames)) stop(paste0('missing MCMCdefs for: ', paste0(setdiff(nimbleMCMCs, MCMCdefNames), collapse=', ')))
+    },
+    
+    writeModelFile = function() {
+      writeLines(paste0('model\n', paste0(deparse(code), collapse='\n')), con=modelFileName)
+    },
+    
+    fileToList = function(file) {
+      if(!file.exists(file)) {
+        warning(paste0('missing Stan input file: \'', file, '\''))
+        return(NULL)
+      }
+      env <- new.env()
+      source(file, local = env)
+      lst <- list()
+      for(name in ls(env))   lst[[name]] <- get(name, env)
+      return(lst)
+    },
+    
+    show = function() {
+      cat(paste0('MCMC_CODESS object\n',
+                 'algorithms:  ', paste0(MCMCs, collapse=', '), '\n',
+                 'monitors:  ', paste0(monitorNodesNIMBLE, collapse=', '), '\n',
+                 'model code:\n',
+                 paste0(deparse(model), collapse='\n')))
+    }
+  )
 )
 
 
