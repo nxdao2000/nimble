@@ -635,16 +635,17 @@ MCMC_CODESSClass <- setRefClass(
           
         }
         samplesArray <- samplesArray[(burnin+1):floor(niter/thin), , drop=FALSE]
-        addToOutput(mcmcTag, samplesArray, timeEach, monitorNodesNIMBLE)
+        addToOutput(mcmcTag, samplesArray, timeEach, monitorNodesNIMBLE,iMCMC)
       }
 
     },
     
-    addToOutput = function(MCMCtag, samplesArray, timeEach, monitorNodesNIMBLE) {
+    addToOutput = function(MCMCtag, samplesArray, timeEach, monitorNodesNIMBLE,iMCMC) {
       output$samples[[MCMCtag]] <<- t(samplesArray) ## makes dim1:monitors, and dim2:iter
+      rownames(output$samples[[MCMCtag]]) <<- RmcmcNamesList[[iMCMC]]
       addTimeResult(MCMCtag, timeEach)
       summaryArray <- array(NA, c(nSummaryStats, nMonitorNodes))
-      dimnames(summaryArray) <- list(summaryStatDimNames, monitorNodesNIMBLE)
+      dimnames(summaryArray) <- list(summaryStatDimNames, RmcmcNamesList[[iMCMC]])
       
       for(iStat in seq_along(summaryStats)) {
         summaryArray[iStat, ] <- apply(samplesArray, 2, summaryStatFunctions[[iStat]])
@@ -694,7 +695,7 @@ MCMC_CODESSClass <- setRefClass(
       dev.new()
       par(mfrow = c(length(output$samples),1), mar=c(3,3,2,1), mgp=c(0,0.6,0), tcl=-0.3)
       for(iMCMC in 1:length(output$samples)){
-        nSamplers <- nrow(output$samples[[nimbleMCMCs[iMCMC]]])
+        nSamplers <- nrow(output$samples[[iMCMC]])
         densityList <- apply(output$samples[[iMCMC]][ ,drop=FALSE], 1, density)
         xlim <- range(unlist(lapply(densityList, function(d) d$x)))
         xlim <- mean(xlim) + (xlim-mean(xlim)) * 1.1
@@ -702,7 +703,7 @@ MCMC_CODESSClass <- setRefClass(
         plot(-100, -100, xlim=xlim, ylim=c(0,ymax),
              main=paste0('posterior density:  ', names(output$summary)[iMCMC]),
              xlab='', ylab='', yaxt='n', bty='n')
-        legend(x='topleft', legend=MCMCs, lty=1, lwd=2, col=cols[1:nMCMCs], bty='n')
+        legend(x='topleft', legend=rownames(output$samples[[iMCMC]]), lty=1, lwd=2, col=cols[1:nSamplers], bty='n')
         for(i in 1:nSamplers)     polygon(densityList[[i]], border=cols[i])
         abline(h=0, col='white')
       }
