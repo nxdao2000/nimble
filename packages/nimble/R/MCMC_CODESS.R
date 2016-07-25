@@ -311,7 +311,9 @@ MCMC_CODESSClass <- setRefClass(
     
     ## set in run()
     Cmodel = 'ANY',   ## compiled Cmodel object
-    RmcmcTargetList = 'list',    ## list of the R (nimble) MCMC functions
+    RmcmcTargetList = 'list',    ## list of the R (nimble) MCMC target
+    RmcmcNamesList = 'list',    ## list of the R (nimble) MCMC samplers' names
+    
     RmcmcFunctionList = 'list',    ## list of the R (nimble) MCMC functions
     CmcmcFunctionList = 'list',    ## list of the C (nimble) MCMC functions
     output = 'list'   ## list of numeric outputs: samples, summary, timing
@@ -452,11 +454,12 @@ MCMC_CODESSClass <- setRefClass(
     init_output = function() {
       samples <- list()
       summary <- list()
+      monitor <-list()
       timing <- rep(NA, nMCMCs+1)
       names(timing) <- c(MCMCs, 'nimble_compile')
       if(stanMCMCflag) timing['stan_compile'] <- NA
       runParams <- c(niter = niter, burnin = burnin, thin = thin, nkeep = nkeep, burninFraction = burninFraction) 
-      initialOutput <- list(samples=samples, summary=summary, timing=timing, runParams = runParams)
+      initialOutput <- list(samples=samples, summary=summary, monitor=monitor, timing=timing, runParams = runParams)
       if(calculateEfficiency) initialOutput$efficiency <- list()
       output <<- initialOutput
     },
@@ -558,7 +561,28 @@ MCMC_CODESSClass <- setRefClass(
         mcmcTag <- nimbleMCMCs[iMCMC]
         mcmcDef <- MCMCdefs[[mcmcTag]]
         mcmcConf <- eval(mcmcDef)
-        RmcmcTargetList[[iMCMC]] <<- mcmcConf$findSamplersOnNodes(targetNames[[1]])
+        TargetIndex <-c()
+        SamplerIndex <-c()
+        for ( i in 1: length(monitorVars))
+        {
+          if(monitorVars[i] %in% targetNames){
+            TargetIndex <- c(TargetIndex, mcmcConf$findSamplersOnNodes(monitorVars[i]))
+          }
+          
+        }
+        
+        RmcmcTargetList[[iMCMC]] <<- TargetIndex
+        Nmonitor <-length(monitorVars)
+        RmcmcNamesList[[iMCMC]] <<-rep(NA, length(TargetIndex)+Nmonitor)
+        Samplers <- mcmcConf$getSamplers()
+        for (j in 1:(length(TargetIndex)+Nmonitor)){
+          if (j <= Nmonitor)
+            RmcmcNamesList[[iMCMC]][j] <<-monitorVars[j]
+          else 
+            RmcmcNamesList[[iMCMC]][j] <<- Samplers[[TargetIndex[j-Nmonitor]]]$name
+          
+        }
+
         mcmcConf$addMonitors(monitorVars, print = FALSE)
         mcmcConf$setThin(thin, print = FALSE)
         RmcmcFunctionList[[mcmcTag]] <<- buildMCMC(mcmcConf)
@@ -611,76 +635,12 @@ MCMC_CODESSClass <- setRefClass(
           
         }
         samplesArray <- samplesArray[(burnin+1):floor(niter/thin), , drop=FALSE]
-        addToOutput(mcmcTag, samplesArray, timeEach)
+        addToOutput(mcmcTag, samplesArray, timeEach, monitorNodesNIMBLE)
       }
-#       for(iMCMC in seq_along(nimbleMCMCs)) {
-#         mcmcTag <- nimbleMCMCs[iMCMC]
-#         mcmcDef <- MCMCdefs[[mcmcTag]]
-#         mcmcConf <- eval(mcmcDef)
-#         mcmcConf$addMonitors(monitorVars, print = FALSE)
-#         RmcmcTargetList[[iMCMC]] <<- mcmcConf$findSamplersOnNodes(targetNames[[1]])
-#         mcmcConf$setThin(thin, print = FALSE)
-#         RmcmcFunctionList[[mcmcTag]] <<- buildMCMC(mcmcConf)
-#       }
-#       timeResult <- system.time({
-#         Cmodel <<- compileNimble(Rmodel)
-#         CmcmcFunctionList_temp <- compileNimble(RmcmcFunctionList, project = Rmodel)
-#         if(nNimbleMCMCs == 1) { CmcmcFunctionList[[nimbleMCMCs[1]]] <<- CmcmcFunctionList_temp
-#         } else                { CmcmcFunctionList                   <<- CmcmcFunctionList_temp }
-#       })
-#       addTimeResult('nimble_compile', timeResult)
-#       output$targetNames<<-targetNames
-#       output$TargetList <<- RmcmcTargetList
-#       
-#       for(iMCMC in seq_along(nimbleMCMCs)) {
-#         Cmodel$setInits(inits);     calculate(Cmodel)
-#         mcmcTag <- nimbleMCMCs[iMCMC]
-#         Cmcmc <- CmcmcFunctionList[[mcmcTag]]
-#         if(setSeed) set.seed(0)
-#         if (length(RmcmcTargetList[[iMCMC]])>0){
-#           monitorVars1 <- monitorVars
-#           for (i in 1 : length(RmcmcTargetList[[iMCMC]])){
-#             
-#             monitorVars1 <- c(monitorVars1, paste(mcmcTag, RmcmcTargetList[[iMCMC]][i] ))
-#             
-#           }
-#           monitorNodesNIMBLE <<- monitorVars1
-#           nMonitorNodes <<- length(monitorVars1)
-#           init_output()
-#           
-#         }
-#         
-#         Cmcmc$run(niter, time = TRUE)
-#         timeResults <-Cmcmc$getTimes()
-#         timeEach  <- rep(timeResult[3], length(monitorVars))
-#         
-#         
-#         CmvSamples <- Cmcmc$mvSamples
-#         samplesArray <- as.matrix(CmvSamples, varNames = monitorVars)
-#         
-#         if (length(RmcmcTargetList[[iMCMC]])>0){
-#           for (i in 1 : length(RmcmcTargetList[[iMCMC]])){
-#             
-#             beforeSamples <- Cmcmc$samplerFunctions$contentsList[[RmcmcTargetList[[iMCMC]][i]]]$before
-#             afterSamples <- Cmcmc$samplerFunctions$contentsList[[RmcmcTargetList[[iMCMC]][i]]]$after
-#             x = cbind(beforeSamples, afterSamples)
-#             samplesArray <- cbind(samplesArray, codess(x=x, tuning=tuning))
-#             
-#              timeEach <- c(timeEach, timeResults[[RmcmcTargetList[[iMCMC]][i]]])
-#             
-#             
-#           }
-#           
-#           
-#         }
-#         
-#         samplesArray <- samplesArray[(burnin+1):floor(niter/thin), , drop=FALSE]
-#         output$samplesArray[iMCMC]<<-samplesArray
-#         addToOutput(mcmcTag, samplesArray, timeEach)
-#       }
+
     },
     
-    addToOutput = function(MCMCtag, samplesArray, timeEach) {
+    addToOutput = function(MCMCtag, samplesArray, timeEach, monitorNodesNIMBLE) {
       output$samples[[MCMCtag]] <<- t(samplesArray) ## makes dim1:monitors, and dim2:iter
       addTimeResult(MCMCtag, timeEach)
       summaryArray <- array(NA, c(nSummaryStats, nMonitorNodes))
@@ -700,6 +660,7 @@ MCMC_CODESSClass <- setRefClass(
         
       }
       output$summary[[MCMCtag]] <<- summaryArray
+      output$monitor[[MCMCtag]] <<- monitorNodesNIMBLE
       if(calculateEfficiency) {
         output$efficiency[[MCMCtag]]$min  <<- min(summaryArray[effDim,] )
         output$efficiency[[MCMCtag]]$mean <<- mean(summaryArray[effDim,] )
@@ -715,35 +676,39 @@ MCMC_CODESSClass <- setRefClass(
       if(nMCMCs > length(cols))    { message('too many MCMCs to plot'); return() }
       
       ## for each monitorNode, generate traceplot for each MCMC
-      for(monitorNode in monitorNodesNIMBLE) {
-        dev.new()
-        par(mfrow=c(nMCMCs,1), mar=c(3,3,2,1), mgp=c(0,0.6,0), tcl=-0.3)
-        for(i in seq_along(MCMCs)) {
-          plot(x=1:nkeep, y=output$samples[MCMCs[i], monitorNode, ],
-               main=paste0(monitorNode, ' traceplot:  ', MCMCs[i]),
+      #for(monitorNode in monitorNodesNIMBLE) {
+      for(iMCMC in seq_along(nimbleMCMCs)){
+        
+          dev.new
+        nSamplers <- nrow(output$samples[[nimbleMCMCs[iMCMC]]])
+        par(mfrow=c(nSamplers,1), mar=c(3,3,2,1), mgp=c(0,0.6,0), tcl=-0.3)
+        for(i in 1:nSamplers) {
+          plot(x=1:nkeep, y=output$samples[[nimbleMCMCs[iMCMC]]][i, ],
+               main=paste0(names(output$summary)[iMCMC], ' traceplot:  ', RmcmcNamesList[[iMCMC]][i]),
                type='l', col=cols[i], , xlab='', ylab='', xaxt='n', bty='l') }
-        filename <- paste0(plotName, '_traceplots_', monitorNode, '.pdf')
+        filename <- paste0(names(output$summary)[iMCMC], '_traceplots_','.pdf')
         if(savePlot)   { dev.print(device = pdf, file = filename) }
       }
       
       ## density plots
       dev.new()
-      par(mfrow = c(nMonitorNodes,1), mar=c(3,3,2,1), mgp=c(0,0.6,0), tcl=-0.3)
-      for(monitorNode in monitorNodesNIMBLE) {
-        densityList <- apply(output$samples[, monitorNode, , drop=FALSE], 1, density)
+      par(mfrow = c(nSamplers,1), mar=c(3,3,2,1), mgp=c(0,0.6,0), tcl=-0.3)
+      for(iMCMC in seq_along(nimbleMCMCs)){
+        nSamplers <- nrow(output$samples[[nimbleMCMCs[iMCMC]]])
+        densityList <- apply(output$samples[[iMCMC]][ ,drop=FALSE], 1, density)
         xlim <- range(unlist(lapply(densityList, function(d) d$x)))
         xlim <- mean(xlim) + (xlim-mean(xlim)) * 1.1
         ymax <- max(unlist(lapply(densityList, function(d) d$y))) * 1.1
         plot(-100, -100, xlim=xlim, ylim=c(0,ymax),
-             main=paste0('posterior density:  ', monitorNode),
+             main=paste0('posterior density:  ', names(output$summary)[iMCMC]),
              xlab='', ylab='', yaxt='n', bty='n')
         legend(x='topleft', legend=MCMCs, lty=1, lwd=2, col=cols[1:nMCMCs], bty='n')
-        for(i in seq_along(MCMCs))     polygon(densityList[[i]], border=cols[i])
+        for(i in 1:nSamplers)     polygon(densityList[[i]], border=cols[i])
         abline(h=0, col='white')
       }
-      filename <- paste0(plotName, '_densities.pdf')
+      filename <- paste0(names(output$summary)[iMCMC], '_densities.pdf')
       if(savePlot)   { dev.print(device = pdf, file = filename) }
-    },
+     },
     
     checkMCMCdefNames = function() {
       if(!all(nimbleMCMCs %in% MCMCdefNames)) stop(paste0('missing MCMCdefs for: ', paste0(setdiff(nimbleMCMCs, MCMCdefNames), collapse=', ')))
