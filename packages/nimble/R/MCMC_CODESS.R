@@ -692,8 +692,8 @@ MCMC_CODESSClass <- setRefClass(
       
       ## density plots
       dev.new()
-      par(mfrow = c(nSamplers,1), mar=c(3,3,2,1), mgp=c(0,0.6,0), tcl=-0.3)
-      for(iMCMC in seq_along(nimbleMCMCs)){
+      par(mfrow = c(length(output$samples),1), mar=c(3,3,2,1), mgp=c(0,0.6,0), tcl=-0.3)
+      for(iMCMC in 1:length(output$samples)){
         nSamplers <- nrow(output$samples[[nimbleMCMCs[iMCMC]]])
         densityList <- apply(output$samples[[iMCMC]][ ,drop=FALSE], 1, density)
         xlim <- range(unlist(lapply(densityList, function(d) d$x)))
