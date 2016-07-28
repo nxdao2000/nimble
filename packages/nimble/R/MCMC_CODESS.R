@@ -582,7 +582,7 @@ MCMC_CODESSClass <- setRefClass(
             RmcmcNamesList[[iMCMC]][j] <<- Samplers[[TargetIndex[j-Nmonitor]]]$name
           
         }
-
+        
         mcmcConf$addMonitors(monitorVars, print = FALSE)
         mcmcConf$setThin(thin, print = FALSE)
         RmcmcFunctionList[[mcmcTag]] <<- buildMCMC(mcmcConf)
@@ -637,7 +637,7 @@ MCMC_CODESSClass <- setRefClass(
         samplesArray <- samplesArray[(burnin+1):floor(niter/thin), , drop=FALSE]
         addToOutput(mcmcTag, samplesArray, timeEach, monitorNodesNIMBLE,iMCMC)
       }
-
+      
     },
     
     addToOutput = function(MCMCtag, samplesArray, timeEach, monitorNodesNIMBLE,iMCMC) {
@@ -689,7 +689,7 @@ MCMC_CODESSClass <- setRefClass(
                main=paste0(names(output$summary)[iMCMC], ' traceplot:  ', RmcmcNamesList[[iMCMC]][i]),
                type='l', col=cols[i], , xlab='', ylab='', xaxt='n', bty='l') }
         filename <- paste0(names(output$summary)[iMCMC], '_traceplots_','.pdf')
-       
+        
         
         
         
@@ -702,46 +702,48 @@ MCMC_CODESSClass <- setRefClass(
       if (length(output$samples)>3)
         npage = floor(length(output$samples)/3)
       nlast = length(output$samples)- npage*3
-      for (j in 0:(npage-1)){
-      par(mfrow = c(3,1), mar=c(3,3,2,1), mgp=c(0,0.6,0), tcl=-0.3)
-      for(iMCMC in 1:3){
-        nSamplers <- nrow(output$samples[[j*3+iMCMC]])
-        densityList <- apply(output$samples[[j*3+iMCMC]][ ,drop=FALSE], 1, density)
-        xlim <- range(unlist(lapply(densityList, function(d) d$x)))
-        xlim <- mean(xlim) + (xlim-mean(xlim)) * 1.1
-        ymax <- max(unlist(lapply(densityList, function(d) d$y))) * 1.1
-        plot(-100, -100, xlim=xlim, ylim=c(0,ymax),
-             main=paste0('posterior density:  ', names(output$summary)[j*3+iMCMC]),
-             xlab='', ylab='', yaxt='n', bty='n')
-        legend(x='topleft', legend=rownames(output$samples[[j*3+iMCMC]]), lty=1, lwd=2, col=cols[1:nSamplers], bty='n')
-        for(i in 1:nSamplers)     polygon(densityList[[i]], border=cols[i])
-        abline(h=0, col='white')
-      }
-      filename <- paste0(names(output$summary)[j*3+iMCMC], '_densities.pdf')
-
+      if(npage>0){
+        for (j in 0:(npage-1)){
+          par(mfrow = c(3,1), mar=c(3,3,2,1), mgp=c(0,0.6,0), tcl=-0.3)
+          for(iMCMC in 1:3){
+            nSamplers <- nrow(output$samples[[j*3+iMCMC]])
+            densityList <- apply(output$samples[[j*3+iMCMC]][ ,drop=FALSE], 1, density)
+            xlim <- range(unlist(lapply(densityList, function(d) d$x)))
+            xlim <- mean(xlim) + (xlim-mean(xlim)) * 1.1
+            ymax <- max(unlist(lapply(densityList, function(d) d$y))) * 1.1
+            plot(-100, -100, xlim=xlim, ylim=c(0,ymax),
+                 main=paste0('posterior density:  ', names(output$summary)[j*3+iMCMC]),
+                 xlab='', ylab='', yaxt='n', bty='n')
+            legend(x='topleft', legend=rownames(output$samples[[j*3+iMCMC]]), lty=1, lwd=2, col=cols[1:nSamplers], bty='n')
+            for(i in 1:nSamplers)     polygon(densityList[[i]], border=cols[i])
+            abline(h=0, col='white')
+          }
+          filename <- paste0(names(output$summary)[j*3+iMCMC], '_densities.pdf')
+          
           #  if(savePlot)   { dev.print(device = pdf, file = filename) }
+        }
       }
       if(nlast>0){
-      par(mfrow = c(3,1), mar=c(3,3,2,1), mgp=c(0,0.6,0), tcl=-0.3)
-      for(iMCMC in 1:nlast){
-        nSamplers <- nrow(output$samples[[npage*3+iMCMC]])
-        densityList <- apply(output$samples[[npage*3+iMCMC]][ ,drop=FALSE], 1, density)
-        xlim <- range(unlist(lapply(densityList, function(d) d$x)))
-        xlim <- mean(xlim) + (xlim-mean(xlim)) * 1.1
-        ymax <- max(unlist(lapply(densityList, function(d) d$y))) * 1.1
-        plot(-100, -100, xlim=xlim, ylim=c(0,ymax),
-             main=paste0('posterior density:  ', names(output$summary)[npage*3+iMCMC]),
-             xlab='', ylab='', yaxt='n', bty='n')
-        legend(x='topleft', legend=rownames(output$samples[[npage*3+iMCMC]]), lty=1, lwd=2, col=cols[1:nSamplers], bty='n')
-        for(i in 1:nSamplers)     polygon(densityList[[i]], border=cols[i])
-        abline(h=0, col='white')
+        par(mfrow = c(3,1), mar=c(3,3,2,1), mgp=c(0,0.6,0), tcl=-0.3)
+        for(iMCMC in 1:nlast){
+          nSamplers <- nrow(output$samples[[npage*3+iMCMC]])
+          densityList <- apply(output$samples[[npage*3+iMCMC]][ ,drop=FALSE], 1, density)
+          xlim <- range(unlist(lapply(densityList, function(d) d$x)))
+          xlim <- mean(xlim) + (xlim-mean(xlim)) * 1.1
+          ymax <- max(unlist(lapply(densityList, function(d) d$y))) * 1.1
+          plot(-100, -100, xlim=xlim, ylim=c(0,ymax),
+               main=paste0('posterior density:  ', names(output$summary)[npage*3+iMCMC]),
+               xlab='', ylab='', yaxt='n', bty='n')
+          legend(x='topleft', legend=rownames(output$samples[[npage*3+iMCMC]]), lty=1, lwd=2, col=cols[1:nSamplers], bty='n')
+          for(i in 1:nSamplers)     polygon(densityList[[i]], border=cols[i])
+          abline(h=0, col='white')
+        }
+        filename <- paste0(names(output$summary)[npage*3+iMCMC], '_densities.pdf')
+        
+        #  if(savePlot)   { dev.print(device = pdf, file = filename) }
       }
-      filename <- paste0(names(output$summary)[npage*3+iMCMC], '_densities.pdf')
       
-      #  if(savePlot)   { dev.print(device = pdf, file = filename) }
-      }
-    
-      },
+    },
     
     checkMCMCdefNames = function() {
       if(!all(nimbleMCMCs %in% MCMCdefNames)) stop(paste0('missing MCMCdefs for: ', paste0(setdiff(nimbleMCMCs, MCMCdefNames), collapse=', ')))
