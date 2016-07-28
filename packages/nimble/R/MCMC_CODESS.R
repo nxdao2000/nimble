@@ -210,7 +210,6 @@ codess<-function(x, tuning){
 }
 
 
-
 #' Class \code{MCMCsuiteClass}
 #'
 #' @aliases MCMCsuiteClass-class
@@ -367,7 +366,7 @@ MCMC_CODESSClass <- setRefClass(
       nkeep <<- floor(niter/thin) - burnin
       burninFraction <<- burnin / (nkeep + burnin)
       setMonitors(monitors)
-      targetNames <<-targetNames
+      targetNames <<- targetNames
       setSummaryStats(summaryStats, calculateEfficiency)
       setMCMCs(MCMCs)
       setMCMCdefs(MCMCdefs)
@@ -578,9 +577,16 @@ MCMC_CODESSClass <- setRefClass(
         for (j in 1:(length(TargetIndex)+Nmonitor)){
           if (j <= Nmonitor)
             RmcmcNamesList[[iMCMC]][j] <<-monitorVars[j]
-          else 
-            RmcmcNamesList[[iMCMC]][j] <<- Samplers[[TargetIndex[j-Nmonitor]]]$name
-          
+          else{ 
+            if(iMCMC==1){
+              RmcmcNamesList[[iMCMC]][j] <<- MCMCs[j-Nmonitor+1] 
+            }
+            else{
+              RmcmcNamesList[[iMCMC]][j] <<- MCMCs[iMCMC] 
+
+            }                
+            
+          }
         }
         
         mcmcConf$addMonitors(monitorVars, print = FALSE)
@@ -674,7 +680,7 @@ MCMC_CODESSClass <- setRefClass(
     
     generate_plots = function() {
       cols <- c(2:6, 8:9)
-      if(nMCMCs > length(cols))    { message('too many MCMCs to plot'); return() }
+      #if(nMCMCs > length(cols))    { message('too many MCMCs to plot'); return() }
       
       ## for each monitorNode, generate traceplot for each MCMC
       #for(monitorNode in monitorNodesNIMBLE) {
