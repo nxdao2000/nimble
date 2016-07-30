@@ -96,6 +96,7 @@ Collate:
     MCMC_samplers.R
     MCMC_conjugacy.R
     MCMC_suite.R
+    MCMC_CODESS.R
     MCMC_comparisons.R
     MCMC_autoBlock.R
     MCEM_build.R
