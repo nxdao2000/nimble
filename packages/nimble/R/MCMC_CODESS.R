@@ -688,28 +688,43 @@ MCMC_CODESSClass <- setRefClass(
         
         # dev.new()
         nSamplers <- nrow(output$samples[[nimbleMCMCs[iMCMC]]])
+        npage= 0
+        if (nSamplers>3)
+          npage = floor(nSamplers/3)
+        nlast = nSamplers - npage*3
+      if(npage>0){
+        for (j in 0:(npage-1)){
+        par(mfrow=c(3,1), mar=c(3,3,2,1), mgp=c(0,0.6,0), tcl=-0.3)
+        for(i in 1:3) {
+          plot(x=1:nkeep, y=output$samples[[nimbleMCMCs[iMCMC]]][j*3+i, ],
+               main=paste0(names(output$summary)[iMCMC], ' traceplot:  ', RmcmcNamesList[[iMCMC]][j*3+i]),
+               type='l', col=cols[j*3+i], , xlab='', ylab='', xaxt='n', bty='l') }
         
-        par(mfrow=c(nSamplers,1), mar=c(3,3,2,1), mgp=c(0,0.6,0), tcl=-0.3)
-        for(i in 1:nSamplers) {
-          plot(x=1:nkeep, y=output$samples[[nimbleMCMCs[iMCMC]]][i, ],
-               main=paste0(names(output$summary)[iMCMC], ' traceplot:  ', RmcmcNamesList[[iMCMC]][i]),
-               type='l', col=cols[i], , xlab='', ylab='', xaxt='n', bty='l') }
-        filename <- paste0(names(output$summary)[iMCMC], '_traceplots_','.pdf')
-        
+        }
+       }
         
         
         
         #if(savePlot)   { dev.print(device = pdf, file = filename) }
-      }
       
+      if(nlast>0){
+	par(mfrow=c(3,1), mar=c(3,3,2,1), mgp=c(0,0.6,0), tcl=-0.3)
+        for(i in 1:nlast) {
+          plot(x=1:nkeep, y=output$samples[[nimbleMCMCs[iMCMC]]][npage*3+i, ],
+               main=paste0(names(output$summary)[iMCMC], ' traceplot:  ', RmcmcNamesList[[iMCMC]][npage*3+i]),
+               type='l', col=cols[npage*3+i], , xlab='', ylab='', xaxt='n', bty='l') }
+        
+      }
+      filename <- paste0(names(output$summary)[iMCMC], '_traceplots_','.pdf')
       ## density plots
       #dev.new()
-      npage= 0
+      }
+      npage1= 0
       if (length(output$samples)>3)
-        npage = floor(length(output$samples)/3)
-      nlast = length(output$samples)- npage*3
-      if(npage>0){
-        for (j in 0:(npage-1)){
+        npage1 = floor(length(output$samples)/3)
+      nlast1 = length(output$samples)- npage1*3
+      if(npage1>0){
+        for (j in 0:(npage1-1)){
           par(mfrow = c(3,1), mar=c(3,3,2,1), mgp=c(0,0.6,0), tcl=-0.3)
           for(iMCMC in 1:3){
             nSamplers <- nrow(output$samples[[j*3+iMCMC]])
@@ -724,27 +739,25 @@ MCMC_CODESSClass <- setRefClass(
             for(i in 1:nSamplers)     polygon(densityList[[i]], border=cols[i])
             abline(h=0, col='white')
           }
-          filename <- paste0(names(output$summary)[j*3+iMCMC], '_densities.pdf')
           
           #  if(savePlot)   { dev.print(device = pdf, file = filename) }
         }
       }
-      if(nlast>0){
+      if(nlast1>0){
         par(mfrow = c(3,1), mar=c(3,3,2,1), mgp=c(0,0.6,0), tcl=-0.3)
-        for(iMCMC in 1:nlast){
-          nSamplers <- nrow(output$samples[[npage*3+iMCMC]])
-          densityList <- apply(output$samples[[npage*3+iMCMC]][ ,drop=FALSE], 1, density)
+        for(iMCMC in 1:nlast1){
+          nSamplers <- nrow(output$samples[[npage1*3+iMCMC]])
+          densityList <- apply(output$samples[[npage1*3+iMCMC]][ ,drop=FALSE], 1, density)
           xlim <- range(unlist(lapply(densityList, function(d) d$x)))
           xlim <- mean(xlim) + (xlim-mean(xlim)) * 1.1
           ymax <- max(unlist(lapply(densityList, function(d) d$y))) * 1.1
           plot(-100, -100, xlim=xlim, ylim=c(0,ymax),
-               main=paste0('posterior density:  ', names(output$summary)[npage*3+iMCMC]),
+               main=paste0('posterior density:  ', names(output$summary)[npage1*3+iMCMC]),
                xlab='', ylab='', yaxt='n', bty='n')
-          legend(x='topleft', legend=rownames(output$samples[[npage*3+iMCMC]]), lty=1, lwd=2, col=cols[1:nSamplers], bty='n')
+          legend(x='topleft', legend=rownames(output$samples[[npage1*3+iMCMC]]), lty=1, lwd=2, col=cols[1:nSamplers], bty='n')
           for(i in 1:nSamplers)     polygon(densityList[[i]], border=cols[i])
           abline(h=0, col='white')
         }
-        filename <- paste0(names(output$summary)[npage*3+iMCMC], '_densities.pdf')
         
         #  if(savePlot)   { dev.print(device = pdf, file = filename) }
       }
