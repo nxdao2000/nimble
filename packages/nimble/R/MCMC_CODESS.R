@@ -209,6 +209,106 @@ codess<-function(x, tuning){
   
 }
 
+sampler_record_wrapper <- nimbleFunction(
+    contains = sampler_BASE,
+    setup = function(model, mvSaved, target, control){
+      numSamples <- 0
+      before <- c(0, 0)
+      after <- c(0, 0)
+      samplerFunctionList <- nimbleFunctionList(sampler_BASE)
+    ###### make sure to provide *named* arguments to this function
+    ###### shouldn't require anything in control$control, if you don't want
+    controlListForNestedSampler <- mcmc_generateControlListArgument(samplerFunction = control$sampler_function, control = control$control)
+    samplerFunctionList[[1]] <- eval(call( control$sampler_function, model = model, mvSaved = mvSaved, target = target, control =  controlListForNestedSampler))}, 
+    run = function() {
+      ## these lines are new:
+      numSamples <<- numSamples + 1
+      setSize(before, numSamples)
+      setSize(after, numSamples)
+      before[numSamples] <<- model[[target]]
+      ## back to the original sampler function code:
+      
+      samplerFunctionList[[1]]$run()
+      
+      ## this line new:
+      after[numSamples] <<- model[[target]]
+    },
+    methods = list(
+      reset = function() {samplerFunctionList[[1]]$reset()}
+    ))
+
+
+
+
+## Construct MCMCconf from SamplerList
+BuildMCMCconf <- function(mySamplerList, targetNames, monitor){
+  n = length(mySamplerList)
+  p = length(monitor)
+  MCMCdefs<-vector(mode="list", length=(n+1))
+  names(MCMCdefs)[1]<-'Combine'
+  
+  str1 <- "{
+  mcmcConf <- configureMCMC(Rmodel)\n"
+  
+  str1<- paste0(str1,"mcmcConf$removeSamplers('",targetNames[[1]],"')\n")
+  for (i in 1:n){
+    str1<-paste0(str1,"mcmcConf$addSampler(target = '",targetNames[[1]],"', type = sampler_record_wrapper, control = list(sampler_function = '",mySamplerList[[i]]$type,"', control = list(")
+    m = length(mySamplerList[[i]]$control)
+    if (m==1){
+      str1 <-paste0(str1, names(mySamplerList[[i]]$control[1]),"=",mySamplerList[[i]]$control[1])
+    } else if (m>1){
+      str1 <-paste0(str1, names(mySamplerList[[i]]$control[1]),"=",mySamplerList[[i]]$control[1])
+      for(j in 1:(m-1)){
+        str1 <-paste0(str1,",", names(mySamplerList[[i]]$control[j+1]),"=",mySamplerList[[i]]$control[j+1])
+        
+      }
+      
+    }
+    str1 <-paste0(str1,"), name = '",mySamplerList[[i]]$name,"'))\n")
+  }
+  str2<-"mcmcConf$addMonitors(c('"
+    if (p==1){
+      str2 <-paste0(str2, monitor[1])
+    } else if (p>1){
+      str2 <-paste0(str2, monitor[1]) 
+      for(k in 2:p){
+        str2 <-paste0(str2,"','",monitor[k]) 
+      }
+     }
+    
+    str2<- paste0(str2,"'))\n mcmcConf \n }")
+    
+  str1<-paste0(str1,str2)
+  
+  MCMCdefs[[1]] =parse(text=str1) 
+  
+  for(i in 1:n){
+    names(MCMCdefs)[i+1]<-mySamplerList[[i]]$name
+    str1 <- "{
+    mcmcConf <- configureMCMC(Rmodel)\n"
+    
+    str1<- paste0(str1,"mcmcConf$removeSamplers('",targetNames[[1]],"')\n")
+    str1<-paste0(str1,"mcmcConf$addSampler(target = '",targetNames[[1]],"', type = sampler_record_wrapper, control = list(sampler_function = '",mySamplerList[[i]]$type,"', control = list(")
+    m = length(mySamplerList[[i]]$control)
+    if (m==1){
+      str1 <-paste0(str1, names(mySamplerList[[i]]$control[1]),"=",mySamplerList[[i]]$control[1])
+    } else if (m>1){
+      str1 <-paste0(str1, names(mySamplerList[[i]]$control[1]),"=",mySamplerList[[i]]$control[1])
+      for(j in 1:(m-1)){
+        str1 <-paste0(str1,",", names(mySamplerList[[i]]$control[j+1]),"=",mySamplerList[[i]]$control[j+1])
+        
+      }
+      
+    }
+    str1 <-paste0(str1,"), name = '",mySamplerList[[i]]$name,"'))\n")
+    
+    str1<-paste0(str1,str2)
+    
+    MCMCdefs[[i+1]] =parse(text=str1) 
+  }  
+  return (MCMCdefs)
+}
+
 
 #' Class \code{MCMCsuiteClass}
 #'
