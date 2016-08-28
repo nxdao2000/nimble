@@ -326,16 +326,24 @@ BuildMCMCconf <- function(mySamplerList, targetNames, nontargetNames, monitor){
      }
     
     str2<- paste0(str2,"'))\n mcmcConf \n }")
-    MCMCdefs<-vector(mode="list", length=(n+1))
-    
-    if(n1==0){
+   
+  MCMCdefs<-vector(mode="list", length=(n+n1+1))
+  
+  for(l in 0:n1){
+  
+    if(l==0){
       names(MCMCdefs)[1]<-'ConjCombine'
         str1 <- "{
   mcmcConf <- configureMCMC(Rmodel)\n"
   
   str1<- paste0(str1,"mcmcConf$removeSamplers('",targetNames[[1]],"')\n")
   for (i in 1:n){
-    str1<-paste0(str1,"mcmcConf$addSampler(target = '",targetNames[[1]],"', type = sampler_record_wrapper, control = list(sampler_function = '",mySamplerList$target[[i]]$type,"', control = list(")
+    if(mySamplerList$target[[i]]$type=='sampler_RW_block'){
+    str1<-paste0(str1,"mcmcConf$addSampler(target = c('",targetNames[[1]],"','", nontargetNames[[1]],"'), type = sampler_record_wrapper, control = list(sampler_function = '",mySamplerList$target[[i]]$type,"', control = list(")
+    } else{
+      str1<-paste0(str1,"mcmcConf$addSampler(target = '",targetNames[[1]],"', type = sampler_record_wrapper, control = list(sampler_function = '",mySamplerList$target[[i]]$type,"', control = list(")
+    }
+    
     m = length(mySamplerList$target[[i]]$control)
     if (m==1){
       str1 <-paste0(str1, names(mySamplerList$target[[i]]$control[1]),"=",mySamplerList$target[[i]]$control[1])
@@ -349,37 +357,42 @@ BuildMCMCconf <- function(mySamplerList, targetNames, nontargetNames, monitor){
     }
     str1 <-paste0(str1,"), name = '",mySamplerList$target[[i]]$name,"'))\n")
   
+    
   }
   str1<-paste0(str1,str2)
   
   MCMCdefs[[1]] =parse(text=str1) 
     }
     else{
-      
-    names(MCMCdefs)[1]<-paste0(mySamplerList$nontarget[[1]]$name,'Combine')
+      names(MCMCdefs)[l+1]<-paste0(mySamplerList$nontarget[[l]]$name,'Combine')
   str1 <- "{
   mcmcConf <- configureMCMC(Rmodel)\n"
   str1<- paste0(str1,"mcmcConf$removeSamplers('",nontargetNames[[1]],"')\n")
 
-  str1<-paste0(str1,"mcmcConf$addSampler(target = '",nontargetNames[[1]],"', type = sampler_record_wrapper, control = list(sampler_function = '",mySamplerList$nontarget[[1]]$type,"', control = list(")
-    m = length(mySamplerList$nontarget[[1]]$control)
+  str1<-paste0(str1,"mcmcConf$addSampler(target = '",nontargetNames[[1]],"', type = sampler_record_wrapper, control = list(sampler_function = '",mySamplerList$nontarget[[l]]$type,"', control = list(")
+    m = length(mySamplerList$nontarget[[l]]$control)
     if (m==1){
-      str1 <-paste0(str1, names(mySamplerList$nontarget[[1]]$control[1]),"=",mySamplerList$nontarget[[1]]$control[1])
+      str1 <-paste0(str1, names(mySamplerList$nontarget[[l]]$control[1]),"=",mySamplerList$nontarget[[l]]$control[1])
     } else if (m>1){
-      str1 <-paste0(str1, names(mySamplerList$nontarget[[1]]$control[1]),"=",mySamplerList$nontarget[[1]]$control[1])
+      str1 <-paste0(str1, names(mySamplerList$nontarget[[l]]$control[1]),"=",mySamplerList$nontarget[[l]]$control[1])
       for(j in 1:(m-1)){
-        str1 <-paste0(str1,",", names(mySamplerList$nontarget[[1]]$control[j+1]),"=",mySamplerList$nontarget[[1]]$control[j+1])
+        str1 <-paste0(str1,",", names(mySamplerList$nontarget[[l]]$control[j+1]),"=",mySamplerList$nontarget[[l]]$control[j+1])
         
       }
       
     }
-    str1 <-paste0(str1,"), name = '",mySamplerList$nontarget[[1]]$name,"'))\n")
+    str1 <-paste0(str1,"), name = '",mySamplerList$nontarget[[l]]$name,"'))\n")
   
     
     
   str1<- paste0(str1,"mcmcConf$removeSamplers('",targetNames[[1]],"')\n")
   for (i in 1:n){
-    str1<-paste0(str1,"mcmcConf$addSampler(target = '",targetNames[[1]],"', type = sampler_record_wrapper, control = list(sampler_function = '",mySamplerList$target[[i]]$type,"', control = list(")
+    
+    if(mySamplerList$target[[i]]$type=='sampler_RW_block'){
+    str1<-paste0(str1,"mcmcConf$addSampler(target = c('",targetNames[[1]],"','", nontargetNames[[1]],"'), type = sampler_record_wrapper, control = list(sampler_function = '",mySamplerList$target[[i]]$type,"', control = list(")
+    } else{
+      str1<-paste0(str1,"mcmcConf$addSampler(target = '",targetNames[[1]],"', type = sampler_record_wrapper, control = list(sampler_function = '",mySamplerList$target[[i]]$type,"', control = list(")
+    }
     m = length(mySamplerList$target[[i]]$control)
     if (m==1){
       str1 <-paste0(str1, names(mySamplerList$target[[i]]$control[1]),"=",mySamplerList$target[[i]]$control[1])
@@ -396,17 +409,29 @@ BuildMCMCconf <- function(mySamplerList, targetNames, nontargetNames, monitor){
   }
   str1<-paste0(str1,str2)
   
-  MCMCdefs[[1]] =parse(text=str1)
+  MCMCdefs[[l+1]] =parse(text=str1)
+      
+      
+    
   
-     }
-  
+     
+    }
+  }
   for(i in 1:n){
-    names(MCMCdefs)[i+1]<-mySamplerList$target[[i]]$name
+    names(MCMCdefs)[n1+i+1]<-mySamplerList$target[[i]]$name
     str1 <- "{
     mcmcConf <- configureMCMC(Rmodel)\n"
     
     str1<- paste0(str1,"mcmcConf$removeSamplers('",targetNames[[1]],"')\n")
-    str1<-paste0(str1,"mcmcConf$addSampler(target = '",targetNames[[1]],"', type = sampler_record_wrapper, control = list(sampler_function = '",mySamplerList$target[[i]]$type,"', control = list(")
+    
+    if(mySamplerList$target[[i]]$type=='sampler_RW_block'){
+      str1<- paste0(str1,"mcmcConf$removeSamplers('",nontargetNames[[1]],"')\n")
+      str1<-paste0(str1,"mcmcConf$addSampler(target = c('",targetNames[[1]],"','",nontargetNames[[1]],"'), type = sampler_record_wrapper, control = list(sampler_function = '",mySamplerList$target[[i]]$type,"', control = list(")
+    }
+    else{
+      str1<-paste0(str1,"mcmcConf$addSampler(target = '",targetNames[[1]],"', type = sampler_record_wrapper, control = list(sampler_function = '",mySamplerList$target[[i]]$type,"', control = list(")
+    }
+    
     m = length(mySamplerList$target[[i]]$control)
     if (m==1){
       str1 <-paste0(str1, names(mySamplerList$target[[i]]$control[1]),"=",mySamplerList$target[[i]]$control[1])
@@ -422,7 +447,7 @@ BuildMCMCconf <- function(mySamplerList, targetNames, nontargetNames, monitor){
     
     str1<-paste0(str1,str2)
     
-    MCMCdefs[[i+1]] =parse(text=str1) 
+    MCMCdefs[[n1+i+1]] =parse(text=str1) 
   }  
   return (MCMCdefs)
 }
@@ -635,7 +660,8 @@ MCMC_CODESSClass <- setRefClass(
         n <- length
         ess <- effectiveSize
         efficiency <- function(x) return(0)   ## placeholder; calculation done in addToOutput()
-        summaryStats_arg <- c(summaryStats_arg, 'n', 'ess', 'efficiency')
+        codamethod <- function(x) return(1)
+        summaryStats_arg <- c(summaryStats_arg, 'n', 'ess', 'efficiency','codamethod')
       }
       summaryStats <<- summaryStats_arg
       CI95_low <- function(x) quantile(x, probs = 0.025)
@@ -677,7 +703,10 @@ MCMC_CODESSClass <- setRefClass(
       if(stanMCMCflag) timing['stan_compile'] <- NA
       runParams <- c(niter = niter, burnin = burnin, thin = thin, nkeep = nkeep, burninFraction = burninFraction) 
       initialOutput <- list(samples=samples, summary=summary, monitor=monitor, timing=timing, runParams = runParams)
-      if(calculateEfficiency) initialOutput$efficiency <- list()
+      if(calculateEfficiency){
+        initialOutput$efficiency <- list()
+        initialOutput$codamethod <- list()
+      }
       output <<- initialOutput
     },
     
@@ -840,10 +869,15 @@ MCMC_CODESSClass <- setRefClass(
         Cmcmc$run(niter, time = TRUE)
         timeResults <-Cmcmc$getTimes()
         timeEach  <- rep(timeResult[3], length(monitorVars))
-        
+        timeOthers <- 0
         CmvSamples <- Cmcmc$mvSamples
         samplesArray <- as.matrix(CmvSamples, varNames = monitorVars)
-        
+        for(i in 1: (length(timeResults)-length(RmcmcTargetList[[iMCMC]]))){
+          timeOthers = timeOthers + timeResults[i] 
+        }
+	  	
+	
+
         if (length(RmcmcTargetList[[iMCMC]])>0){
           for (i in 1 : length(RmcmcTargetList[[iMCMC]])){
             
@@ -851,7 +885,7 @@ MCMC_CODESSClass <- setRefClass(
             afterSamples <- Cmcmc$samplerFunctions$contentsList[[RmcmcTargetList[[iMCMC]][i]]]$after
             x = cbind(beforeSamples, afterSamples)
             samplesArray <- cbind(samplesArray, codess(x=x, tuning=tuning))
-            timeEach <- c(timeEach, timeResults[[RmcmcTargetList[[iMCMC]][i]]])
+            timeEach <- c(timeEach, timeOthers+timeResults[[RmcmcTargetList[[iMCMC]][i]]])
             
             
           }
@@ -879,8 +913,14 @@ MCMC_CODESSClass <- setRefClass(
         for (i in 1 : nMonitorNodes){
           essDim <- which(summaryStatDimNames == 'ess')
           effDim <- which(summaryStatDimNames == 'efficiency')
+          codamethodDim <- which(summaryStatDimNames == 'codamethod')
+          if(i> length(monitorVars))
+            summaryArray[codamethodDim,i ] <- 0  
           thisTime <- timeEach[i]
           summaryArray[effDim,i ] <- summaryArray[essDim,i] / thisTime
+          
+          
+          
         }
         
       }
