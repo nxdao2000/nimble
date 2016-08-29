@@ -381,7 +381,7 @@ BuildMCMCconf <- function(mySamplerList, targetNames, nontargetNames, monitor){
       }
       
     }
-    str1 <-paste0(str1,"), name = '",mySamplerList$nontarget[[l]]$name,"'))\n")
+    str1 <-paste0(str1,"), name = '",mySamplerList$target[[l]]$name,"'))\n")
   
     
     
@@ -811,7 +811,7 @@ MCMC_CODESSClass <- setRefClass(
         SamplerIndex <-c()
         for ( i in 1: length(monitorVars))
         {
-          if(monitorVars[i] %in% targetNames){
+          if(monitorVars[i] == targetNames[[1]]){
             TargetIndex <- c(TargetIndex, mcmcConf$findSamplersOnNodes(monitorVars[i]))
           }
           
@@ -829,7 +829,7 @@ MCMC_CODESSClass <- setRefClass(
               RmcmcNamesList[[iMCMC]][j] <<- MCMCs[j-Nmonitor+1] 
             }
             else{
-              RmcmcNamesList[[iMCMC]][j] <<- MCMCs[iMCMC] 
+              RmcmcNamesList[[iMCMC]][j] <<- MCMCs[j-Nmonitor+1] 
 
             }                
             
