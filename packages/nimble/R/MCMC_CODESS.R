@@ -530,11 +530,12 @@ MCMCdefs<-vector(mode="list", length=1)
   for (i in 1:n){
     if(monitor[i]==targetNames[[1]]){
       for(l in 1:length(mySamplerList$target)){
-      if(mySamplerList$target[[l]]$type=='sampler_RW_block' && length(GroupLM)>1){
+      if(mySamplerList$target[[l]]$type=='sampler_RW_block'){
         str1<-paste0(str1,"mcmcConf$addSampler(target = c('", GroupLM[1])
-      for (j in 2:length(GroupLM))
-        str1<-paste0(str1,"','", GroupLM[j])
-      str1<-paste0(str1,"'), type = sampler_record_wrapper, control = list(sampler_function = '",mySamplerList$target[[l]]$type,"', control = list(")
+        if (length(GroupLM)>1)
+          for (j in 2:length(GroupLM))
+            str1<-paste0(str1,"','", GroupLM[j])
+        str1<-paste0(str1,"'), type = sampler_record_wrapper, control = list(sampler_function = '",mySamplerList$target[[l]]$type,"', control = list(")
     } else{
       str1<-paste0(str1,"mcmcConf$addSampler(target = '",monitor[i],"', type = sampler_record_wrapper, control = list(sampler_function = '",mySamplerList$target[[l]]$type,"', control = list(")
     }
@@ -556,7 +557,7 @@ MCMCdefs<-vector(mode="list", length=1)
     else{
     if(DefaultSamplerList[[i]]$type=='sampler_RW_block'){
     
-      str1<-paste0(str1,"mcmcConf$addSampler(target = c('",monitor[i],"','", monitor[-i][1],"'), type = sampler_record_wrapper, control = list(sampler_function = '",DefaultSamplerList$target[[i]]$type,"', control = list(")
+      str1<-paste0(str1,"mcmcConf$addSampler(target = c('",monitor[i],"','", monitor[-i][1],"'), type = sampler_record_wrapper, control = list(sampler_function = 'sampler_RW_block', control = list(")
     } else{
       str1<-paste0(str1,"mcmcConf$addSampler(target = '",monitor[i],"', type = sampler_record_wrapper, control = list(sampler_function = '",DefaultSamplerList[[i]]$type,"', control = list(")
     }
@@ -581,6 +582,89 @@ MCMCdefs<-vector(mode="list", length=1)
   MCMCdefs[[1]] =parse(text=str1) 
  
   return (MCMCdefs)
+}
+
+
+GroupOfLeastMixing <- function(Samples, leastMixing){
+  empCov <- cov(Samples)
+  empCor <<- cov2cor(empCov)
+  distMatrix <- as.dist(1 - abs(empCor))
+  hTree <- hclust(distMatrix, method = 'complete')
+  h=mean(hTree$height)
+  cutreeList <- cutree(hTree, h=h)
+  uniqueCutreeList <- unique(cutreeList)
+  candidateGroupsList <- lapply(uniqueCutreeList, function(ct) {
+    return(names(which(cutreeList==ct)))}) 
+  for(i in seq_along(candidateGroupsList)){
+    if(leastMixing %in% candidateGroupsList[[i]])
+      return (candidateGroupsList[[i]])
+  }
+} 
+
+ImproveMixing <- function(code, constants, data, inits, niter, burnin, tuning, monitors, makePlot, calculateEfficiency, setSeed, DefaultSamplerList, mySamplerList, verbose) {
+  
+  bestEfficiency = 0
+  
+  repeat {
+  
+    #### Build and run the default sampler.
+    conf <-BuildDefaultConf(DefaultSamplerList, monitor= monitor)
+    eval(conf)
+    Rmcmc <- buildMCMC(conf)
+    Cmodel <- compileNimble(Rmodel)
+    Cmcmc <- compileNimble(Rmcmc, project = Rmodel)
+    
+    Nchain=niter
+    Cmcmc$run(Nchain, time=TRUE)
+    #### Get the least mixing index.
+    Samples <- as.matrix(Cmcmc$mvSamples)
+    output<-apply(Samples, 2, effectiveSize)
+    lindex <- which.min(output)
+  
+    if(output[lindex] < bestEfficiency){
+      return (list(DefaultSamplerList, monitor))
+      break
+    } else{
+      bestEfficiency <- output[lindex]
+    }
+    leastMixing <- names(output[lindex])
+    if(verbose){
+      print("Least mixing variable:")
+      print(leastMixing)
+    }
+    
+    leastIndex = which(monitor==leastMixing)
+    ### Cluster the least mixing variable using distance matrix
+    GroupLM<-GroupOfLeastMixing(Samples, leastMixing)
+    #### Choose the target as the least mixing variable, generate a list of cadidate samplers.
+    targetNames= list(monitor[leastIndex])
+  
+    MCMCdefs <-BuildCombinedConf(DefaultSamplerList=DefaultSamplerList, mySamplerList=mySamplerList, targetNames=targetNames, GroupLM=GroupLM, monitor= monitor)
+    MCMCs = names(MCMCdefs)
+    #### Then we run codess to identify the best mixing sampler for the worst mixing variable.
+    test1<-MCMC_CODESS(code = code, constants = constants, data=data, inits=inits, MCMCs = MCMCs, MCMCdefs = MCMCdefs, targetNames= targetNames,  niter = niter, burnin = burnin, tuning=tuning, monitors = monitor,
+    makePlot = makePlot, calculateEfficiency = calculateEfficiency, setSeed = setSeed)
+  
+    #### Find the best mixing sampler
+    if(verbose)
+      print(test1$summary)
+    output<-test1$summary[[1]]
+    n=nrow(output)
+    bestIndex <- which.max(output[(length(monitor)+1):n,'efficiency'])
+    #### Replace the worst mixing sampler with the best mixing sampler found.
+    DefaultSamplerList[leastIndex]<-mySamplerList$target[bestIndex]
+    
+    if(verbose){
+      print("The best mixing index:")
+      print(bestIndex)
+      print("End of iteration")
+      print("###############################################################")
+    }
+  
+    
+    
+  }  
+
 }
 
 
