@@ -532,9 +532,10 @@ MCMCdefs<-vector(mode="list", length=1)
       for(l in 1:length(mySamplerList$target)){
       if(mySamplerList$target[[l]]$type=='sampler_RW_block'){
         str1<-paste0(str1,"mcmcConf$addSampler(target = c('", GroupLM[1])
-        if (length(GroupLM)>1)
+        if (length(GroupLM)>1){
           for (j in 2:length(GroupLM))
             str1<-paste0(str1,"','", GroupLM[j])
+        }
         str1<-paste0(str1,"'), type = sampler_record_wrapper, control = list(sampler_function = '",mySamplerList$target[[l]]$type,"', control = list(")
     } else{
       str1<-paste0(str1,"mcmcConf$addSampler(target = '",monitor[i],"', type = sampler_record_wrapper, control = list(sampler_function = '",mySamplerList$target[[l]]$type,"', control = list(")
