@@ -238,11 +238,53 @@ sampler_record_wrapper <- nimbleFunction(
     ))
 
 
+sampler_conjugate_wrapper <- nimbleFunction(
+    contains = sampler_BASE,
+    setup = function(model, mvSaved, target, control){
+      numSamples <- 0
+      before <- c(0, 0)
+      after <- c(0, 0)
+      samplerFunctionList <- nimbleFunctionList(sampler_BASE)
+    ###### make sure to provide *named* arguments to this function
+    ###### shouldn't require anything in control$control, if you don't want
+    
+      conjugacyResult <- model$checkConjugacy2(target)[[target]]
+      if(is.null(conjugacyResult))     stop('non-conjugate target \'', target, '\' in conjugate sampler')
+      prior <- conjugacyResult$prior
+      dependentCounts <- sapply(conjugacyResult$control, length)
+      names(dependentCounts) <- gsub('^dep_', '', names(dependentCounts))
+      conjSamplerName <- createDynamicConjugateSamplerName(prior = prior, dependentCounts = dependentCounts)
+      if(!dynamicConjugateSamplerExists(conjSamplerName)) {
+        conjSamplerDef <- conjugacyRelationshipsObject$generateDynamicConjugateSamplerDefinition(prior = prior, dependentCounts = dependentCounts)
+        dynamicConjugateSamplerAdd(conjSamplerName, conjSamplerDef)
+      }
+      conjSamplerFunction <- dynamicConjugateSamplerGet(conjSamplerName)
+      
+      
+      controlListForNestedSampler <- mcmc_generateControlListArgument(samplerFunction = conjSamplerFunction, control = conjugacyResult$control)
+    samplerFunctionList[[1]] <- eval(call( "conjSamplerFunction", model = model, mvSaved = mvSaved, target = target, control =  controlListForNestedSampler))}, 
+    run = function() {
+      ## these lines are new:
+      numSamples <<- numSamples + 1
+      setSize(before, numSamples)
+      setSize(after, numSamples)
+      before[numSamples] <<- model[[target]]
+      ## back to the original sampler function code:
+      
+      samplerFunctionList[[1]]$run()
+      
+      ## this line new:
+      after[numSamples] <<- model[[target]]
+    },
+    methods = list(
+      reset = function() {samplerFunctionList[[1]]$reset()}
+    ))
+
 
 
 ## Construct MCMCconf from SamplerList
-BuildMCMCconf1 <- function(mySamplerList, targetNames, monitor){
-  n = length(mySamplerList)
+BuildMCMCconfOld <- function(CandidateSamplerList, targetNames, monitor){
+  n = length(CandidateSamplerList)
   p = length(monitor)
   MCMCdefs<-vector(mode="list", length=(n+1))
   names(MCMCdefs)[1]<-'Combine'
@@ -252,19 +294,19 @@ BuildMCMCconf1 <- function(mySamplerList, targetNames, monitor){
   
   str1<- paste0(str1,"mcmcConf$removeSamplers('",targetNames[[1]],"')\n")
   for (i in 1:n){
-    str1<-paste0(str1,"mcmcConf$addSampler(target = '",targetNames[[1]],"', type = sampler_record_wrapper, control = list(sampler_function = '",mySamplerList[[i]]$type,"', control = list(")
-    m = length(mySamplerList[[i]]$control)
+    str1<-paste0(str1,"mcmcConf$addSampler(target = '",targetNames[[1]],"', type = sampler_record_wrapper, control = list(sampler_function = '",CandidateSamplerList[[i]]$type,"', control = list(")
+    m = length(CandidateSamplerList[[i]]$control)
     if (m==1){
-      str1 <-paste0(str1, names(mySamplerList[[i]]$control[1]),"=",mySamplerList[[i]]$control[1])
+      str1 <-paste0(str1, names(CandidateSamplerList[[i]]$control[1]),"=",CandidateSamplerList[[i]]$control[1])
     } else if (m>1){
-      str1 <-paste0(str1, names(mySamplerList[[i]]$control[1]),"=",mySamplerList[[i]]$control[1])
+      str1 <-paste0(str1, names(CandidateSamplerList[[i]]$control[1]),"=",CandidateSamplerList[[i]]$control[1])
       for(j in 1:(m-1)){
-        str1 <-paste0(str1,",", names(mySamplerList[[i]]$control[j+1]),"=",mySamplerList[[i]]$control[j+1])
+        str1 <-paste0(str1,",", names(CandidateSamplerList[[i]]$control[j+1]),"=",CandidateSamplerList[[i]]$control[j+1])
         
       }
       
     }
-    str1 <-paste0(str1,"), name = '",mySamplerList[[i]]$name,"'))\n")
+    str1 <-paste0(str1,"), name = '",CandidateSamplerList[[i]]$name,"'))\n")
   }
   str2<-"mcmcConf$addMonitors(c('"
     if (p==1){
@@ -283,24 +325,24 @@ BuildMCMCconf1 <- function(mySamplerList, targetNames, monitor){
   MCMCdefs[[1]] =parse(text=str1) 
   
   for(i in 1:n){
-    names(MCMCdefs)[i+1]<-mySamplerList[[i]]$name
+    names(MCMCdefs)[i+1]<-CandidateSamplerList[[i]]$name
     str1 <- "{
     mcmcConf <- configureMCMC(Rmodel)\n"
     
     str1<- paste0(str1,"mcmcConf$removeSamplers('",targetNames[[1]],"')\n")
-    str1<-paste0(str1,"mcmcConf$addSampler(target = '",targetNames[[1]],"', type = sampler_record_wrapper, control = list(sampler_function = '",mySamplerList[[i]]$type,"', control = list(")
-    m = length(mySamplerList[[i]]$control)
+    str1<-paste0(str1,"mcmcConf$addSampler(target = '",targetNames[[1]],"', type = sampler_record_wrapper, control = list(sampler_function = '",CandidateSamplerList[[i]]$type,"', control = list(")
+    m = length(CandidateSamplerList[[i]]$control)
     if (m==1){
-      str1 <-paste0(str1, names(mySamplerList[[i]]$control[1]),"=",mySamplerList[[i]]$control[1])
+      str1 <-paste0(str1, names(CandidateSamplerList[[i]]$control[1]),"=",CandidateSamplerList[[i]]$control[1])
     } else if (m>1){
-      str1 <-paste0(str1, names(mySamplerList[[i]]$control[1]),"=",mySamplerList[[i]]$control[1])
+      str1 <-paste0(str1, names(CandidateSamplerList[[i]]$control[1]),"=",CandidateSamplerList[[i]]$control[1])
       for(j in 1:(m-1)){
-        str1 <-paste0(str1,",", names(mySamplerList[[i]]$control[j+1]),"=",mySamplerList[[i]]$control[j+1])
+        str1 <-paste0(str1,",", names(CandidateSamplerList[[i]]$control[j+1]),"=",CandidateSamplerList[[i]]$control[j+1])
         
       }
       
     }
-    str1 <-paste0(str1,"), name = '",mySamplerList[[i]]$name,"'))\n")
+    str1 <-paste0(str1,"), name = '",CandidateSamplerList[[i]]$name,"'))\n")
     
     str1<-paste0(str1,str2)
     
@@ -309,10 +351,74 @@ BuildMCMCconf1 <- function(mySamplerList, targetNames, monitor){
   return (MCMCdefs)
 }
 
+BuildDefaultConf1 <- function(DefaultSamplerList, monitor){
+  n = length(monitor)
+  str2<-"\nconf$addMonitors(c('"
+    if (n==1){
+      str2 <-paste0(str2, monitor[1])
+    } else if (n>1){
+      str2 <-paste0(str2, monitor[1]) 
+      for(k in 2:n){
+        str2 <-paste0(str2,"','",monitor[k]) 
+      }
+     }
+    
+    str2<- paste0(str2,"'))\n")
+   
+    str1 <- "conf <- configureMCMC(Rmodel)\n"
+  
+  for (i in 1:n){
+    str1<- paste0(str1,"conf$removeSamplers('",monitor[i],"')\n")
+  }
+  for (i in 1:n){
+    if(regexpr('conjugate', DefaultSamplerList[[i]]$type)>0){
+      node <- monitor[i]
+      conjInfo <- Rmodel$checkConjugacy2(node)[[node]]
+      str1<- paste0(str1,"\nconf$addConjugateSampler(",conjInfo,") \n")
+      #str1 <-
+      #        paste0(
+      #          str1, "\n conf$addSampler(target = '",monitor[i],"', type = sampler_conjugate_wrapper, control=list(), name = '",DefaultSamplerList[[i]]$name,"') \n"
+ #             )
+    }
+    else if(DefaultSamplerList[[i]]$type=='sampler_RW_block'){
+      if(length(DefaultSamplerList[[i]]$target)>1){
+        str1<-paste0(str1,"conf$addSampler(target = c('",DefaultSamplerList[[i]]$target[1])
+        for(j in 2: length(DefaultSamplerList[[i]]$target))
+          str1<-paste0(str1,"','",DefaultSamplerList[[i]]$target[j])
+      } else {
+        str1<-paste0(str1,"conf$addSampler(target = c('",monitor[i],"','",monitor[-i][1])
+      }
+      str1<-paste0(str1,"'), type =", DefaultSamplerList[[i]]$type,", control = list(")
+    } else{
+      str1<-paste0(str1,"\nconf$addSampler(target = '",monitor[i],"', type ='", DefaultSamplerList[[i]]$type,"', control = list(")
+    }
+    
+    m = length(DefaultSamplerList[[i]]$control)
+    if (m==1){
+      str1 <-paste0(str1, names(DefaultSamplerList[[i]]$control[1]),"=",DefaultSamplerList[[i]]$control[1])
+    } else if (m>1){
+      str1 <-paste0(str1, names(DefaultSamplerList[[i]]$control[1]),"=",DefaultSamplerList[[i]]$control[1])
+      for(j in 1:(m-1)){
+        str1 <-paste0(str1,",", names(DefaultSamplerList[[i]]$control[j+1]),"=",DefaultSamplerList[[i]]$control[j+1])
+        
+      }
+      
+    }
+    if(!regexpr('conjugate', DefaultSamplerList[[i]]$type)>0)
+      str1 <-paste0(str1,"), name = '",names(DefaultSamplerList)[i],"')\n")
+  
+    
+  }
+  str1<-paste0(str1,str2)
+  eval(str1)
+  return (conf)
+}
+
+
 ## Construct MCMCconf from SamplerList
-BuildMCMCconf <- function(mySamplerList, targetNames, nontargetNames, monitor){
-  n = length(mySamplerList$target)
-  n1= length(mySamplerList$nontarget)
+BuildMCMCconf <- function(CandidateSamplerList, targetNames, nontargetNames, monitor){
+  n = length(CandidateSamplerList$target)
+  n1= length(CandidateSamplerList$nontarget)
   
   p = length(monitor)
   str2<-"mcmcConf$addMonitors(c('"
@@ -338,24 +444,24 @@ BuildMCMCconf <- function(mySamplerList, targetNames, nontargetNames, monitor){
   
   str1<- paste0(str1,"mcmcConf$removeSamplers('",targetNames[[1]],"')\n")
   for (i in 1:n){
-    if(mySamplerList$target[[i]]$type=='sampler_RW_block'){
-    str1<-paste0(str1,"mcmcConf$addSampler(target = c('",targetNames[[1]],"','", nontargetNames[[1]],"'), type = sampler_record_wrapper, control = list(sampler_function = '",mySamplerList$target[[i]]$type,"', control = list(")
+    if(CandidateSamplerList$target[[i]]$type=='sampler_RW_block'){
+    str1<-paste0(str1,"mcmcConf$addSampler(target = c('",targetNames[[1]],"','", nontargetNames[[1]],"'), type = sampler_record_wrapper, control = list(sampler_function = '",CandidateSamplerList$target[[i]]$type,"', control = list(")
     } else{
-      str1<-paste0(str1,"mcmcConf$addSampler(target = '",targetNames[[1]],"', type = sampler_record_wrapper, control = list(sampler_function = '",mySamplerList$target[[i]]$type,"', control = list(")
+      str1<-paste0(str1,"mcmcConf$addSampler(target = '",targetNames[[1]],"', type = sampler_record_wrapper, control = list(sampler_function = '",CandidateSamplerList$target[[i]]$type,"', control = list(")
     }
     
-    m = length(mySamplerList$target[[i]]$control)
+    m = length(CandidateSamplerList$target[[i]]$control)
     if (m==1){
-      str1 <-paste0(str1, names(mySamplerList$target[[i]]$control[1]),"=",mySamplerList$target[[i]]$control[1])
+      str1 <-paste0(str1, names(CandidateSamplerList$target[[i]]$control[1]),"=",CandidateSamplerList$target[[i]]$control[1])
     } else if (m>1){
-      str1 <-paste0(str1, names(mySamplerList$target[[i]]$control[1]),"=",mySamplerList$target[[i]]$control[1])
+      str1 <-paste0(str1, names(CandidateSamplerList$target[[i]]$control[1]),"=",CandidateSamplerList$target[[i]]$control[1])
       for(j in 1:(m-1)){
-        str1 <-paste0(str1,",", names(mySamplerList$target[[i]]$control[j+1]),"=",mySamplerList$target[[i]]$control[j+1])
+        str1 <-paste0(str1,",", names(CandidateSamplerList$target[[i]]$control[j+1]),"=",CandidateSamplerList$target[[i]]$control[j+1])
         
       }
       
     }
-    str1 <-paste0(str1,"), name = '",mySamplerList$target[[i]]$name,"'))\n")
+    str1 <-paste0(str1,"), name = '",CandidateSamplerList$target[[i]]$name,"'))\n")
   
     
   }
@@ -364,47 +470,47 @@ BuildMCMCconf <- function(mySamplerList, targetNames, nontargetNames, monitor){
   MCMCdefs[[1]] =parse(text=str1) 
     }
     else{
-      names(MCMCdefs)[l+1]<-paste0(mySamplerList$nontarget[[l]]$name,'Combine')
+      names(MCMCdefs)[l+1]<-paste0(CandidateSamplerList$nontarget[[l]]$name,'Combine')
   str1 <- "{
   mcmcConf <- configureMCMC(Rmodel)\n"
   str1<- paste0(str1,"mcmcConf$removeSamplers('",nontargetNames[[1]],"')\n")
 
-  str1<-paste0(str1,"mcmcConf$addSampler(target = '",nontargetNames[[1]],"', type = sampler_record_wrapper, control = list(sampler_function = '",mySamplerList$nontarget[[l]]$type,"', control = list(")
-    m = length(mySamplerList$nontarget[[l]]$control)
+  str1<-paste0(str1,"mcmcConf$addSampler(target = '",nontargetNames[[1]],"', type = sampler_record_wrapper, control = list(sampler_function = '",CandidateSamplerList$nontarget[[l]]$type,"', control = list(")
+    m = length(CandidateSamplerList$nontarget[[l]]$control)
     if (m==1){
-      str1 <-paste0(str1, names(mySamplerList$nontarget[[l]]$control[1]),"=",mySamplerList$nontarget[[l]]$control[1])
+      str1 <-paste0(str1, names(CandidateSamplerList$nontarget[[l]]$control[1]),"=",CandidateSamplerList$nontarget[[l]]$control[1])
     } else if (m>1){
-      str1 <-paste0(str1, names(mySamplerList$nontarget[[l]]$control[1]),"=",mySamplerList$nontarget[[l]]$control[1])
+      str1 <-paste0(str1, names(CandidateSamplerList$nontarget[[l]]$control[1]),"=",CandidateSamplerList$nontarget[[l]]$control[1])
       for(j in 1:(m-1)){
-        str1 <-paste0(str1,",", names(mySamplerList$nontarget[[l]]$control[j+1]),"=",mySamplerList$nontarget[[l]]$control[j+1])
+        str1 <-paste0(str1,",", names(CandidateSamplerList$nontarget[[l]]$control[j+1]),"=",CandidateSamplerList$nontarget[[l]]$control[j+1])
         
       }
       
     }
-    str1 <-paste0(str1,"), name = '",mySamplerList$target[[l]]$name,"'))\n")
+    str1 <-paste0(str1,"), name = '",CandidateSamplerList$target[[l]]$name,"'))\n")
   
     
     
   str1<- paste0(str1,"mcmcConf$removeSamplers('",targetNames[[1]],"')\n")
   for (i in 1:n){
     
-    if(mySamplerList$target[[i]]$type=='sampler_RW_block'){
-    str1<-paste0(str1,"mcmcConf$addSampler(target = c('",targetNames[[1]],"','", nontargetNames[[1]],"'), type = sampler_record_wrapper, control = list(sampler_function = '",mySamplerList$target[[i]]$type,"', control = list(")
+    if(CandidateSamplerList$target[[i]]$type=='sampler_RW_block'){
+    str1<-paste0(str1,"mcmcConf$addSampler(target = c('",targetNames[[1]],"','", nontargetNames[[1]],"'), type = sampler_record_wrapper, control = list(sampler_function = '",CandidateSamplerList$target[[i]]$type,"', control = list(")
     } else{
-      str1<-paste0(str1,"mcmcConf$addSampler(target = '",targetNames[[1]],"', type = sampler_record_wrapper, control = list(sampler_function = '",mySamplerList$target[[i]]$type,"', control = list(")
+      str1<-paste0(str1,"mcmcConf$addSampler(target = '",targetNames[[1]],"', type = sampler_record_wrapper, control = list(sampler_function = '",CandidateSamplerList$target[[i]]$type,"', control = list(")
     }
-    m = length(mySamplerList$target[[i]]$control)
+    m = length(CandidateSamplerList$target[[i]]$control)
     if (m==1){
-      str1 <-paste0(str1, names(mySamplerList$target[[i]]$control[1]),"=",mySamplerList$target[[i]]$control[1])
+      str1 <-paste0(str1, names(CandidateSamplerList$target[[i]]$control[1]),"=",CandidateSamplerList$target[[i]]$control[1])
     } else if (m>1){
-      str1 <-paste0(str1, names(mySamplerList$target[[i]]$control[1]),"=",mySamplerList$target[[i]]$control[1])
+      str1 <-paste0(str1, names(CandidateSamplerList$target[[i]]$control[1]),"=",CandidateSamplerList$target[[i]]$control[1])
       for(j in 1:(m-1)){
-        str1 <-paste0(str1,",", names(mySamplerList$target[[i]]$control[j+1]),"=",mySamplerList$target[[i]]$control[j+1])
+        str1 <-paste0(str1,",", names(CandidateSamplerList$target[[i]]$control[j+1]),"=",CandidateSamplerList$target[[i]]$control[j+1])
         
       }
       
     }
-    str1 <-paste0(str1,"), name = '",mySamplerList$target[[i]]$name,"'))\n")
+    str1 <-paste0(str1,"), name = '",CandidateSamplerList$target[[i]]$name,"'))\n")
   
   }
   str1<-paste0(str1,str2)
@@ -418,32 +524,32 @@ BuildMCMCconf <- function(mySamplerList, targetNames, nontargetNames, monitor){
     }
   }
   for(i in 1:n){
-    names(MCMCdefs)[n1+i+1]<-mySamplerList$target[[i]]$name
+    names(MCMCdefs)[n1+i+1]<-CandidateSamplerList$target[[i]]$name
     str1 <- "{
     mcmcConf <- configureMCMC(Rmodel)\n"
     
     str1<- paste0(str1,"mcmcConf$removeSamplers('",targetNames[[1]],"')\n")
     
-    if(mySamplerList$target[[i]]$type=='sampler_RW_block'){
+    if(CandidateSamplerList$target[[i]]$type=='sampler_RW_block'){
       str1<- paste0(str1,"mcmcConf$removeSamplers('",nontargetNames[[1]],"')\n")
-      str1<-paste0(str1,"mcmcConf$addSampler(target = c('",targetNames[[1]],"','",nontargetNames[[1]],"'), type = sampler_record_wrapper, control = list(sampler_function = '",mySamplerList$target[[i]]$type,"', control = list(")
+      str1<-paste0(str1,"mcmcConf$addSampler(target = c('",targetNames[[1]],"','",nontargetNames[[1]],"'), type = sampler_record_wrapper, control = list(sampler_function = '",CandidateSamplerList$target[[i]]$type,"', control = list(")
     }
     else{
-      str1<-paste0(str1,"mcmcConf$addSampler(target = '",targetNames[[1]],"', type = sampler_record_wrapper, control = list(sampler_function = '",mySamplerList$target[[i]]$type,"', control = list(")
+      str1<-paste0(str1,"mcmcConf$addSampler(target = '",targetNames[[1]],"', type = sampler_record_wrapper, control = list(sampler_function = '",CandidateSamplerList$target[[i]]$type,"', control = list(")
     }
     
-    m = length(mySamplerList$target[[i]]$control)
+    m = length(CandidateSamplerList$target[[i]]$control)
     if (m==1){
-      str1 <-paste0(str1, names(mySamplerList$target[[i]]$control[1]),"=",mySamplerList$target[[i]]$control[1])
+      str1 <-paste0(str1, names(CandidateSamplerList$target[[i]]$control[1]),"=",CandidateSamplerList$target[[i]]$control[1])
     } else if (m>1){
-      str1 <-paste0(str1, names(mySamplerList$target[[i]]$control[1]),"=",mySamplerList$target[[i]]$control[1])
+      str1 <-paste0(str1, names(CandidateSamplerList$target[[i]]$control[1]),"=",CandidateSamplerList$target[[i]]$control[1])
       for(j in 1:(m-1)){
-        str1 <-paste0(str1,",", names(mySamplerList$target[[i]]$control[j+1]),"=",mySamplerList$target[[i]]$control[j+1])
+        str1 <-paste0(str1,",", names(CandidateSamplerList$target[[i]]$control[j+1]),"=",CandidateSamplerList$target[[i]]$control[j+1])
         
       }
       
     }
-    str1 <-paste0(str1,"), name = '",mySamplerList$target[[i]]$name,"'))\n")
+    str1 <-paste0(str1,"), name = '",CandidateSamplerList$target[[i]]$name,"'))\n")
     
     str1<-paste0(str1,str2)
     
@@ -452,6 +558,177 @@ BuildMCMCconf <- function(mySamplerList, targetNames, nontargetNames, monitor){
   return (MCMCdefs)
 }
 
+## Construct MCMCconf from CandidateSamplerList
+BuildCombinedConf <- function(DefaultSamplerList, CandidateSamplerList, targetNames, GroupLM, monitor) {
+  MCMCdefs <- vector(mode = "list", length = 1)
+  n = length(monitor)
+  
+  p = length(monitor)
+  str2 <- "\n mcmcConf$addMonitors(c('"
+  if (p == 1) {
+    str2 <- paste0(str2, monitor[1])
+  } else if (p > 1) {
+    str2 <- paste0(str2, monitor[1])
+    for (k in 2:p) {
+      str2 <- paste0(str2,"','",monitor[k])
+    }
+  }
+  
+  str2 <- paste0(str2,"'))\n mcmcConf \n }")
+  
+  names(MCMCdefs)[1] <- 'Default'
+  str1 <- "{\n
+    mcmcConf <- configureMCMC(Rmodel)\n"
+  
+  for (i in 1:n) {
+    str1 <- paste0(str1,"\n mcmcConf$removeSamplers('",monitor[i],"')\n")
+  }
+  for (i in 1:n) {
+    if (monitor[i] == targetNames[[1]]) {
+      for (l in 1:length(CandidateSamplerList$target)) {
+        if (CandidateSamplerList$target[[l]]$type == 'sampler_RW_block') {
+          str1 <- paste0(str1,"\n mcmcConf$addSampler(target = c('", GroupLM[1])
+          if (length(GroupLM) > 1) {
+            for (j in 2:length(GroupLM))
+              str1 <- paste0(str1,"','", GroupLM[j])
+          }
+          str1 <-
+            paste0(
+              str1,"'), type = sampler_record_wrapper, control = list(sampler_function = '",CandidateSamplerList$target[[l]]$type,"', control = list("
+            )
+        } else if (CandidateSamplerList$target[[l]]$type == 'sampler_conjugate') {
+          conjInfo <- Rmodel$checkConjugacy2(monitor[i])[[monitor[i]]]
+          if (!is.null(conjInfo)) {
+            str1 <-
+              paste0(
+                str1, "\n  conjInfo <- Rmodel$checkConjugacy2('",monitor[i],"')[['",monitor[i],"']]\n"
+              )
+            
+            str1 <-
+              paste0(str1, "\n ConjFunction <- mcmcConf$conjSamplerFunc(conjInfo) \n")
+            
+            str1 <- paste0(str1, "\n prior <- conjInfo$prior \n")
+            
+            str1 <-
+              paste0(
+                str1, "\n mcmcConf$addSampler(target = '",conjInfo$target,"', type = sampler_conjugate_wrapper, control=list(), name = 'conjugate') \n"
+              )
+          }
+        } else{
+          str1 <-
+            paste0(
+              str1,"\n mcmcConf$addSampler(target = '",monitor[i],"', type = sampler_record_wrapper, control = list(sampler_function = '",CandidateSamplerList$target[[l]]$type,"', control = list("
+            )
+          
+        }
+        
+        m = length(CandidateSamplerList$target[[l]]$control)
+        if (m == 1) {
+          str1 <-
+            paste0(
+              str1, names(CandidateSamplerList$target[[l]]$control[1]),"=",CandidateSamplerList$target[[l]]$control[1]
+            )
+        } else if (m > 1) {
+          str1 <-
+            paste0(
+              str1, names(CandidateSamplerList$target[[l]]$control[1]),"=",CandidateSamplerList$target[[l]]$control[1]
+            )
+          for (j in 1:(m - 1)) {
+            str1 <-
+              paste0(
+                str1,",", names(CandidateSamplerList$target[[l]]$control[j + 1]),"=",CandidateSamplerList$target[[l]]$control[j +
+                                                                                                                                1]
+              )
+            
+          }
+          
+        }
+        if (CandidateSamplerList$target[[l]]$type != 'sampler_conjugate')
+          str1 <-
+          paste0(str1,")), name = '",CandidateSamplerList$target[[l]]$name,"')\n")
+      }
+    }
+    else{
+      conjInfo <- NULL
+      if (regexpr('conjugate', DefaultSamplerList[[i]]$name) > 0) {
+        conjInfo <- Rmodel$checkConjugacy2(monitor[i])[[monitor[i]]]
+        if (!is.null(conjInfo)) {
+          str1 <-
+            paste0(
+              str1, "\n  conjInfo <- Rmodel$checkConjugacy2('",monitor[i],"')[['",monitor[i],"']]\n"
+            )
+          str1 <-
+            paste0(str1, "\n  mcmcConf$addConjugateSampler(conjInfo)\n")
+        }
+        
+      } else if (DefaultSamplerList[[i]]$type == 'sampler_RW_block') {
+        str1 <-
+          paste0(
+            str1,"\n mcmcConf$addSampler(target = c('",monitor[i],"','", monitor[-i][1],"'), type = sampler_record_wrapper, control = list(sampler_function = 'sampler_RW_block', control = list("
+          )
+      } else if (DefaultSamplerList[[i]]$type == 'RW') {
+        str1 <-
+          paste0(
+            str1,"\n mcmcConf$addSampler(target = '",monitor[i],"', type = sampler_record_wrapper, control = list(sampler_function = 'sampler_RW', control = list("
+          )
+      } else{
+        str1 <-
+          paste0(
+            str1,"\n mcmcConf$addSampler(target = '",monitor[i],"', type = sampler_record_wrapper, control = list(sampler_function = '",DefaultSamplerList[[i]]$type,"', control = list("
+          )
+      }
+      
+      m = length(DefaultSamplerList[[i]]$control)
+      if (m == 1) {
+        str1 <-
+          paste0(
+            str1, names(DefaultSamplerList[[i]]$control[1]),"=",DefaultSamplerList[[i]]$control[1]
+          )
+      } else if (m > 1) {
+        str1 <-
+          paste0(
+            str1, names(DefaultSamplerList[[i]]$control[1]),"=",DefaultSamplerList[[i]]$control[1]
+          )
+        for (j in 1:(m - 1)) {
+          str1 <-
+            paste0(
+              str1,",", names(DefaultSamplerList[[i]]$control[j + 1]),"=",DefaultSamplerList[[i]]$control[j +
+                                                                                                            1]
+            )
+          
+        }
+        
+      }
+      if (is.null(conjInfo))
+        str1 <-
+        paste0(str1,")), name = '",DefaultSamplerList[[i]]$name,"')\n")
+      
+    }
+  }
+  str1 <- paste0(str1,str2)
+  
+  MCMCdefs[[1]] = parse(text = str1)
+  
+  return (MCMCdefs)
+}  
+
+
+
+GroupOfLeastMixing <- function(Samples, leastMixing){
+  empCov <- cov(Samples)
+  empCor <<- cov2cor(empCov)
+  distMatrix <- as.dist(1 - abs(empCor))
+  hTree <- hclust(distMatrix, method = 'complete')
+  h=mean(hTree$height)
+  cutreeList <- cutree(hTree, h=h)
+  uniqueCutreeList <- unique(cutreeList)
+  candidateGroupsList <- lapply(uniqueCutreeList, function(ct) {
+    return(names(which(cutreeList==ct)))}) 
+  for(i in seq_along(candidateGroupsList)){
+    if(leastMixing %in% candidateGroupsList[[i]])
+      return (candidateGroupsList[[i]])
+  }
+} 
 
 ## Construct MCMCconf from DefaultSamplerList
 BuildDefaultConf <- function(DefaultSamplerList, monitor){
@@ -474,10 +751,18 @@ BuildDefaultConf <- function(DefaultSamplerList, monitor){
     str1<- paste0(str1,"conf$removeSamplers('",monitor[i],"')\n")
   }      
   for (i in 1:n){
-    if(DefaultSamplerList[[i]]$type=='sampler_RW_block'){
-    str1<-paste0(str1,"conf$addSampler(target = c('",monitor[i],"','", monitor[-i][1],"'), type =",DefaultSamplerList[[i]]$type,", control = list(")
+    if(regexpr('conjugate', DefaultSamplerList[[i]]$type)>0){
+      #node <- monitor[i]
+      #conjInfo <- Rmodel$checkConjugacy2(node)[[node]]
+      #str1<- paste0(str1,"\nconf$addConjugateSampler(",conjInfo,") \n")
+      str1 <-
+              paste0(
+                str1, "\n conf$addSampler(target = '",monitor[i],"', type = 'sampler_conjugate_wrapper', control=list(), name = '",DefaultSamplerList[[i]]$name,"') \n"
+              )
+    } else if(DefaultSamplerList[[i]]$type=='sampler_RW_block'){
+    str1<-paste0(str1,"conf$addSampler(target = c('",monitor[i],"','", monitor[-i][1],"'), type ='",DefaultSamplerList[[i]]$type,"', control = list(")
     } else{
-      str1<-paste0(str1,"conf$addSampler(target = '",monitor[i],"', type =", DefaultSamplerList[[i]]$type,", control = list(")
+      str1<-paste0(str1,"conf$addSampler(target = '",monitor[i],"', type ='", DefaultSamplerList[[i]]$type,"', control = list(")
     }
     
     m = length(DefaultSamplerList[[i]]$control)
@@ -491,7 +776,8 @@ BuildDefaultConf <- function(DefaultSamplerList, monitor){
       }
       
     }
-    str1 <-paste0(str1,"), name = '",DefaultSamplerList[[i]]$name,"')\n")
+    if(!regexpr('conjugate', DefaultSamplerList[[i]]$type)>0)
+      str1 <-paste0(str1,"), name = '",DefaultSamplerList[[i]]$name,"')\n")
   
     
   }
@@ -502,107 +788,8 @@ BuildDefaultConf <- function(DefaultSamplerList, monitor){
   return (conf)
 }
 
-## Construct MCMCconf from DefaultSamplerList
-BuildCombinedConf <- function(DefaultSamplerList, mySamplerList, targetNames, GroupLM, monitor){
-MCMCdefs<-vector(mode="list", length=1)
-  n = length(monitor)
-  
-  p = length(monitor)
-  str2<-"mcmcConf$addMonitors(c('"
-    if (p==1){
-      str2 <-paste0(str2, monitor[1])
-    } else if (p>1){
-      str2 <-paste0(str2, monitor[1]) 
-      for(k in 2:p){
-        str2 <-paste0(str2,"','",monitor[k]) 
-      }
-     }
-    
-    str2<- paste0(str2,"'))\n mcmcConf \n }")
-   
-    names(MCMCdefs)[1]<-'Default'
-        str1 <- "{
-  mcmcConf <- configureMCMC(Rmodel)\n"
-  
-  for (i in 1:n){
-    str1<- paste0(str1,"mcmcConf$removeSamplers('",monitor[i],"')\n")
-  }      
-  for (i in 1:n){
-    if(monitor[i]==targetNames[[1]]){
-      for(l in 1:length(mySamplerList$target)){
-      if(mySamplerList$target[[l]]$type=='sampler_RW_block'){
-        str1<-paste0(str1,"mcmcConf$addSampler(target = c('", GroupLM[1])
-        if (length(GroupLM)>1){
-          for (j in 2:length(GroupLM))
-            str1<-paste0(str1,"','", GroupLM[j])
-        }
-        str1<-paste0(str1,"'), type = sampler_record_wrapper, control = list(sampler_function = '",mySamplerList$target[[l]]$type,"', control = list(")
-    } else{
-      str1<-paste0(str1,"mcmcConf$addSampler(target = '",monitor[i],"', type = sampler_record_wrapper, control = list(sampler_function = '",mySamplerList$target[[l]]$type,"', control = list(")
-    }
-    
-    m = length(mySamplerList$target[[l]]$control)
-    if (m==1){
-      str1 <-paste0(str1, names(mySamplerList$target[[l]]$control[1]),"=",mySamplerList$target[[l]]$control[1])
-    } else if (m>1){
-      str1 <-paste0(str1, names(mySamplerList$target[[l]]$control[1]),"=",mySamplerList$target[[l]]$control[1])
-      for(j in 1:(m-1)){
-        str1 <-paste0(str1,",", names(mySamplerList$target[[l]]$control[j+1]),"=",mySamplerList$target[[l]]$control[j+1])
-        
-      }
-      
-    }
-    str1 <-paste0(str1,"), name = '",mySamplerList$target[[l]]$name,"'))\n")
-      }
-    }
-    else{
-    if(DefaultSamplerList[[i]]$type=='sampler_RW_block'){
-    
-      str1<-paste0(str1,"mcmcConf$addSampler(target = c('",monitor[i],"','", monitor[-i][1],"'), type = sampler_record_wrapper, control = list(sampler_function = 'sampler_RW_block', control = list(")
-    } else{
-      str1<-paste0(str1,"mcmcConf$addSampler(target = '",monitor[i],"', type = sampler_record_wrapper, control = list(sampler_function = '",DefaultSamplerList[[i]]$type,"', control = list(")
-    }
-    
-    m = length(DefaultSamplerList[[i]]$control)
-    if (m==1){
-      str1 <-paste0(str1, names(DefaultSamplerList[[i]]$control[1]),"=",DefaultSamplerList[[i]]$control[1])
-    } else if (m>1){
-      str1 <-paste0(str1, names(DefaultSamplerList[[i]]$control[1]),"=",DefaultSamplerList[[i]]$control[1])
-      for(j in 1:(m-1)){
-        str1 <-paste0(str1,",", names(DefaultSamplerList[[i]]$control[j+1]),"=",DefaultSamplerList[[i]]$control[j+1])
-        
-      }
-      
-    }
-    str1 <-paste0(str1,"), name = '",DefaultSamplerList[[i]]$name,"'))\n")
-  
-    }
-  }
-  str1<-paste0(str1,str2)
-  
-  MCMCdefs[[1]] =parse(text=str1) 
- 
-  return (MCMCdefs)
-}
 
-
-GroupOfLeastMixing <- function(Samples, leastMixing){
-  empCov <- cov(Samples)
-  empCor <<- cov2cor(empCov)
-  distMatrix <- as.dist(1 - abs(empCor))
-  hTree <- hclust(distMatrix, method = 'complete')
-  h=mean(hTree$height)
-  cutreeList <- cutree(hTree, h=h)
-  uniqueCutreeList <- unique(cutreeList)
-  candidateGroupsList <- lapply(uniqueCutreeList, function(ct) {
-    return(names(which(cutreeList==ct)))}) 
-  for(i in seq_along(candidateGroupsList)){
-    if(leastMixing %in% candidateGroupsList[[i]])
-      return (candidateGroupsList[[i]])
-  }
-} 
-
-ImproveMixing <- function(code, constants, data, inits, niter, burnin, tuning, monitors, makePlot, calculateEfficiency, setSeed, DefaultSamplerList, mySamplerList, verbose) {
+ImproveMixing <- function(code, constants, data, inits, niter, burnin, tuning, monitors, makePlot, calculateEfficiency, setSeed, DefaultSamplerList, CandidateSamplerList, verbose) {
   
   bestEfficiency = 0
   
@@ -621,8 +808,21 @@ ImproveMixing <- function(code, constants, data, inits, niter, burnin, tuning, m
     Samples <- as.matrix(Cmcmc$mvSamples)
     output<-apply(Samples, 2, effectiveSize)
     lindex <- which.min(output)
-  
+    
+    leastMixing <- names(output[lindex])
+    if(verbose){
+      print(output)
+      print("Current efficiency:")
+      print(bestEfficiency)
+      print("New least efficiency:")
+      print(output[lindex])
+      print("Least mixing variable:")
+      print(leastMixing)
+    }
+    
+      
     if(output[lindex] < bestEfficiency){
+      print("Can not improve. Stop iteration.")
       return (list(DefaultSamplerList, monitor))
       break
     } else{
@@ -630,6 +830,7 @@ ImproveMixing <- function(code, constants, data, inits, niter, burnin, tuning, m
     }
     leastMixing <- names(output[lindex])
     if(verbose){
+      print(output)
       print("Least mixing variable:")
       print(leastMixing)
     }
@@ -639,8 +840,13 @@ ImproveMixing <- function(code, constants, data, inits, niter, burnin, tuning, m
     GroupLM<-GroupOfLeastMixing(Samples, leastMixing)
     #### Choose the target as the least mixing variable, generate a list of cadidate samplers.
     targetNames= list(monitor[leastIndex])
-  
-    MCMCdefs <-BuildCombinedConf(DefaultSamplerList=DefaultSamplerList, mySamplerList=mySamplerList, targetNames=targetNames, GroupLM=GroupLM, monitor= monitor)
+    print("Block includes:")
+    if(length(GroupLM)>1)
+      print(GroupLM)
+    else ## Just block anything to test
+      print(c(monitor[leastIndex],monitor[-leastIndex][1])) 
+      
+    MCMCdefs <-BuildCombinedConf(DefaultSamplerList=DefaultSamplerList, CandidateSamplerList=CandidateSamplerList, targetNames=targetNames, GroupLM=GroupLM, monitor= monitor)
     MCMCs = names(MCMCdefs)
     #### Then we run codess to identify the best mixing sampler for the worst mixing variable.
     test1<-MCMC_CODESS(code = code, constants = constants, data=data, inits=inits, MCMCs = MCMCs, MCMCdefs = MCMCdefs, targetNames= targetNames,  niter = niter, burnin = burnin, tuning=tuning, monitors = monitor,
@@ -653,11 +859,23 @@ ImproveMixing <- function(code, constants, data, inits, niter, burnin, tuning, m
     n=nrow(output)
     bestIndex <- which.max(output[(length(monitor)+1):n,'efficiency'])
     #### Replace the worst mixing sampler with the best mixing sampler found.
-    DefaultSamplerList[leastIndex]<-mySamplerList$target[bestIndex]
-    
+    DefaultSamplerList[[leastIndex]]<-CandidateSamplerList$target[[bestIndex]]
+if(CandidateSamplerList$target[[bestIndex]]$type=="sampler_RW_block")
+{
+  if(length(GroupLM)>1)
+    DefaultSamplerList[[leastIndex]]$target=GroupLM
+  else
+    DefaultSamplerList[[leastIndex]]$target=c(monitor[leastIndex],monitor[-leastIndex][1])
+} else {
+  DefaultSamplerList[[leastIndex]]$target=monitor[leastIndex]
+
+} 
+
     if(verbose){
       print("The best mixing index:")
       print(bestIndex)
+      print("The sampler of the least mixing now is:")
+      print(DefaultSamplerList[[leastIndex]])
       print("End of iteration")
       print("###############################################################")
     }
@@ -1042,7 +1260,8 @@ MCMC_CODESSClass <- setRefClass(
             RmcmcNamesList[[iMCMC]][j] <<-monitorVars[j]
           else{ 
             if(iMCMC==1){
-              RmcmcNamesList[[iMCMC]][j] <<- Samplers[[TargetIndex[j-Nmonitor]]]$control$sampler_function  
+              RmcmcNamesList[[iMCMC]][j] <<- Samplers[[TargetIndex[j-Nmonitor]]]$name 
+                            
             }
             else{
               RmcmcNamesList[[iMCMC]][j] <<- MCMCs[j-Nmonitor] 
@@ -1073,7 +1292,7 @@ MCMC_CODESSClass <- setRefClass(
           monitorVars1 <- monitorVars
           for (i in 1 : length(RmcmcTargetList[[iMCMC]])){
             
-            monitorVars1 <- c(monitorVars1, paste(mcmcTag, RmcmcTargetList[[iMCMC]][i],sep = "" ))
+            monitorVars1 <- c(monitorVars1, paste0(mcmcTag, RmcmcTargetList[[iMCMC]][i]))
             
           }
           monitorNodesNIMBLE <<- monitorVars1
