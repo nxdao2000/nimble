@@ -192,6 +192,7 @@ codess<-function(x, tuning){
   est <- bkde2D(x, bandwidth=bandwidth, gridsize = gridsize, range.x = range.x)
   K <- est$fhat
   K <- t(K) 
+  K[is.na(K)] <- 1/N
   for(j in 1:N) K[,j] <- K[,j] / sum(K[,j])
   
   ### Generating a chain for the discrete kernel
