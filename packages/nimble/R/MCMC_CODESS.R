@@ -746,7 +746,13 @@ BuildDefaultConf <- function(DefaultSamplerList, monitor){
                 str1, "\n conf$addSampler(target = '",monitor[i],"', type = 'sampler_conjugate_wrapper', control=list(), name = '",DefaultSamplerList[[i]]$name,"') \n"
               )
     } else if(DefaultSamplerList[[i]]$type=='sampler_RW_block'){
-    str1<-paste0(str1,"conf$addSampler(target = c('",monitor[i],"','", monitor[-i][1],"'), type ='",DefaultSamplerList[[i]]$type,"', control = list(")
+    str1 <- paste0(str1,"\n conf$addSampler(target = c('", DefaultSamplerList[[i]]$target[1])
+          if (length(DefaultSamplerList[[i]]$target) > 1) {
+            for (j in 2:length(DefaultSamplerList[[i]]$target))
+              str1 <- paste0(str1,"','", DefaultSamplerList[[i]]$target[j])
+          }
+          str1 <-
+            paste0(str1,"'), type = sampler_RW_block, control = list(")
     } else{
       str1<-paste0(str1,"conf$addSampler(target = '",monitor[i],"', type ='", DefaultSamplerList[[i]]$type,"', control = list(")
     }
@@ -810,7 +816,7 @@ ImproveMixing <- function(code, constants, data, inits, niter, burnin, tuning, m
     }
     
       
-    if(output[lindex] < bestEfficiency && leastMixing==names(bestEfficiency) ){
+    if(output[lindex] < bestEfficiency){
       print("Can not improve. Stop iteration.")
       return (list(DefaultSamplerList, monitor))
       break
