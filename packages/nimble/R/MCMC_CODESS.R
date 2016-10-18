@@ -281,6 +281,41 @@ sampler_conjugate_wrapper <- nimbleFunction(
     ))
 
 
+sampler_conjugate <- nimbleFunction(
+    contains = sampler_BASE,
+    setup = function(model, mvSaved, target, control){
+      samplerFunctionList <- nimbleFunctionList(sampler_BASE)
+    ###### make sure to provide *named* arguments to this function
+    ###### shouldn't require anything in control$control, if you don't want
+    
+      conjugacyResult <- model$checkConjugacy2(target)[[target]]
+      if(is.null(conjugacyResult))     stop('non-conjugate target \'', target, '\' in conjugate sampler')
+      prior <- conjugacyResult$prior
+      dependentCounts <- sapply(conjugacyResult$control, length)
+      names(dependentCounts) <- gsub('^dep_', '', names(dependentCounts))
+      conjSamplerName <- createDynamicConjugateSamplerName(prior = prior, dependentCounts = dependentCounts)
+      if(!dynamicConjugateSamplerExists(conjSamplerName)) {
+        conjSamplerDef <- conjugacyRelationshipsObject$generateDynamicConjugateSamplerDefinition(prior = prior, dependentCounts = dependentCounts)
+        dynamicConjugateSamplerAdd(conjSamplerName, conjSamplerDef)
+      }
+      conjSamplerFunction <- dynamicConjugateSamplerGet(conjSamplerName)
+      
+      
+      controlListForNestedSampler <- mcmc_generateControlListArgument(samplerFunction = conjSamplerFunction, control = conjugacyResult$control)
+    samplerFunctionList[[1]] <- eval(call( "conjSamplerFunction", model = model, mvSaved = mvSaved, target = target, control =  controlListForNestedSampler))}, 
+    run = function() {
+      
+      samplerFunctionList[[1]]$run()
+      
+      
+    },
+    methods = list(
+      reset = function() {samplerFunctionList[[1]]$reset()}
+    ))
+
+
+
+
 
 ## Construct MCMCconf from SamplerList
 BuildMCMCconfOld <- function(CandidateSamplerList, targetNames, monitor){
@@ -719,6 +754,20 @@ GroupOfLeastMixing <- function(Samples, leastMixing){
   }
 } 
 
+addSamplerToConf <- function(conf, nodeGroup) {
+    if(length(nodeGroup) > 1) {
+        conf$addSampler(type = 'RW_block', target = nodeGroup, print = FALSE) ; return()
+    }
+   # if(regexpr('conjugate', nodeGroup$type)>0){
+   #   conf$addSampler(type = 'sampler_conjugate_wrapper', target = nodeGroup$target, print = FALSE); return()
+   # }
+    conf$addSampler(type = 'RW', target = nodeGroup, print = FALSE); return()
+    
+      
+   
+}
+
+
 ## Construct MCMCconf from DefaultSamplerList
 BuildDefaultConf <- function(DefaultSamplerList, monitor){
   n = length(monitor)
@@ -735,10 +784,11 @@ BuildDefaultConf <- function(DefaultSamplerList, monitor){
     str2<- paste0(str2,"'))\n")
    
     str1 <- "conf <- configureMCMC(Rmodel)\n"
-  
-  for (i in 1:n){
-    str1<- paste0(str1,"conf$removeSamplers('",monitor[i],"')\n")
-  }      
+    str1 <- "conf$setSamplers()\n"
+    
+  #for (i in 1:n){
+ #   str1<- paste0(str1,"conf$removeSamplers('",monitor[i],"')\n")
+ # }      
   for (i in 1:n){
     if(regexpr('conjugate', DefaultSamplerList[[i]]$type)>0){
       str1 <-
@@ -785,24 +835,58 @@ BuildDefaultConf <- function(DefaultSamplerList, monitor){
 ImproveMixing <- function(code, constants, data, inits, niter, burnin, tuning, monitors, makePlot, calculateEfficiency, setSeed, DefaultSamplerList, CandidateSamplerList, verbose) {
   
   bestEfficiency = c(a=0)
+  j = 0
 
+  initialMCMCconf <<- configureMCMC(Rmodel)
+            nInitialSamplers <- length(initialMCMCconf$samplerConfs)
+            initialMCMCconf$addSampler(type = 'RW',       target = scalarNodeVector[1], print=FALSE)  ## add one RW sampler
+            initialMCMCconf$addSampler(type = 'RW_block', target = scalarNodeVector[1], print=FALSE)  ## add one RW_block sampler
+          #  initialMCMCconf$addSampler(type = 'sampler_conjugate_wrapper', target = scalarNodeVector[1], print=FALSE)  ## add one RW_block sampler
+            initialMCMCconf$addMonitors(monitors, print=FALSE)
+            RinitialMCMC <- buildMCMC(initialMCMCconf)
+            Cmodel <<- compileNimble(Rmodel)
+            CinitialMCMC <- compileNimble(RinitialMCMC, project = Rmodel)   ## (new version) yes, we need this compileNimble call -- this is the whole point!
+            initialMCMCconf$setSamplers(1:nInitialSamplers, print=FALSE)  ## important for new version: removes all news samplers added to initial MCMC conf
+            
+            
+            
 
   repeat {
   
-    
+    j= j+1
     #### Build and run the default sampler.
-    conf <-BuildDefaultConf(DefaultSamplerList, monitor= monitor)
-    eval(conf)
+
+conf <- configureMCMC(oldConf = initialMCMCconf)  ## new version
+            conf$setSamplers()  ## new version -- removes all the samplers from initalMCMCconf
+            
+            for (i in 1:nInitialSamplers){
+    if(regexpr('conjugate', DefaultSamplerList[[i]]$type)>0){
+      conf$addSampler(target = monitor[i],type = 'sampler_conjugate_wrapper', control=list(), name = DefaultSamplerList[[i]]$name)
+    } else if(DefaultSamplerList[[i]]$type=='sampler_RW_block'){
+      conf$addSampler(target = DefaultSamplerList[[i]]$target, type = sampler_RW_block, control = DefaultSamplerList[[i]]$control, name = DefaultSamplerList[[i]]$name)
+    } else{
+      conf$addSampler(target = monitor[i], type =DefaultSamplerList[[i]]$type, control = DefaultSamplerList[[i]]$control, name = DefaultSamplerList[[i]]$name)
+    }
+    
+
+    
+  }
+  conf$addMonitors(monitors, print=FALSE)
+  
+
+
     Rmcmc <- buildMCMC(conf)
     Cmodel <- compileNimble(Rmodel)
     Cmcmc <- compileNimble(Rmcmc, project = Rmodel)
     
-    Nchain=niter
-    Cmcmc$run(Nchain, time=TRUE)
+    timeResult <- system.time({ Cmcmc$run(niter) })
+    print(timeResult[3])
+    
     #### Get the least mixing index.
     Samples <- as.matrix(Cmcmc$mvSamples)
-    output<-apply(Samples, 2, effectiveSize)
+    output<-apply(Samples, 2, effectiveSize)/timeResult[3]
     lindex <- which.min(output)
+    
     
     leastMixing <- names(output[lindex])
     if(verbose){
@@ -816,7 +900,8 @@ ImproveMixing <- function(code, constants, data, inits, niter, burnin, tuning, m
     }
     
       
-    if(output[lindex] < bestEfficiency){
+    if(j>2){
+    #(output[lindex] < bestEfficiency){
       print("Can not improve. Stop iteration.")
       return (list(DefaultSamplerList, monitor))
       break
@@ -877,9 +962,371 @@ if(CandidateSamplerList$target[[bestIndex]]$type=="sampler_RW_block")
   
     
     
-  }  
+  }   
 
 }
+
+autoCodess <- function(code, constants=list(), data=list(), inits=list(),
+                      niter = 10000,
+                      CandidateGroupList = CandidateGroupList,
+                      setSeed0 = TRUE,
+                      verbose = FALSE,
+                      saveSamples = FALSE,
+                      round = TRUE ) {
+    ab <- autoCodessClass_oldClass(code, constants, data, inits,
+                         control = list(niter=niter, setSeed0=setSeed0, verbose=verbose, saveSamples=saveSamples))
+ #   if(!'auto' %in% run) run <- c(run, 'auto')  ## always use 'autoCodess' routine
+    ab$run(CandidateGroupList)
+#     lastAutoInd <- max(grep('^auto', ab$naming))   ## index of final 'auto' iteration
+#     lastAutoGrouping <- ab$grouping[[lastAutoInd]]  ## grouping of final 'auto' iteration
+#     nonTrivialGroups <- lastAutoGrouping[unlist(lapply(lastAutoGrouping, function(x) length(x)>1))]
+#     abList <- list(ab)
+#     names(abList)[1] <- 'model'
+#     df <- createDFfromABlist(abList, niter)
+#     dfmin <- reduceDF(df, round = round)
+#     cat('\nAuto-Codess summary:\n')
+#     print(dfmin)
+#     if(length(nonTrivialGroups) > 0) {
+#         cat('\nAuto-Codess converged on the node groupings:\n')
+#         for(i in seq_along(nonTrivialGroups)) {
+#             group <- nonTrivialGroups[[i]]
+#             cat(paste0('[', i, '] '))
+#             cat(paste0(group, collapse = ', '))
+#             cat('\n')
+#         }
+#     } else cat('\nAuto-Codess converged on all scalar (univariate) sampling\n')
+#     cat('\n')
+#     ## create a new Rmodel and conf with the autoBlock groupings:
+#     Rmodel <- nimbleModel(code=code, constants=constants, data=data, inits=inits)
+#     conf <- configureMCMC(Rmodel, nodes = NULL)
+#     for(nodeGroup in lastAutoGrouping) addSamplerToConf(Rmodel, conf, nodeGroup)
+    
+       
+    retList <- list(ess=ab$ess, efficiency=ab$essPT)
+    if(saveSamples) retList$samples <- ab$samples
+    return(invisible(retList))
+}
+
+autoCodessModel_oldClass <- setRefClass(
+    Class = 'autoCodessModel_oldClass',
+    fields = list(
+        code = 'ANY',
+        constants = 'list',
+        data = 'list',
+        inits = 'list',
+        md = 'ANY',
+        Rmodel = 'ANY',
+        Cmodel = 'ANY',
+        scalarNodeVector = 'character',
+        nodeGroupScalars = 'list',
+        nodeGroupAllBlocked = 'list',
+        monitorsVector = 'character',
+        initialMCMCconf = 'ANY'
+        ),
+    methods = list(
+        initialize = function(code, constants, data, inits) {
+            library(nimble)
+            code <<- code
+            constants <<- if(missing(constants)) list() else constants
+            data <<- if(missing(data)) list() else data
+            inits <<- if(missing(inits)) list() else inits
+            md <<- nimbleModel(code=code, constants=constants, returnDef=TRUE)
+            Rmodel <<- md$newModel(data=data, inits=inits)
+            scalarNodeVector <<- Rmodel$getNodeNames(stochOnly=TRUE, includeData=FALSE, returnScalarComponents=TRUE)
+            nodeGroupScalars <<- lapply(scalarNodeVector, function(x) x)
+            nodeGroupAllBlocked <<- list(scalarNodeVector)
+            stochNodeVector <- Rmodel$getNodeNames(stochOnly=TRUE, includeData=FALSE, returnScalarComponents=FALSE)
+            monitorsVector <<- Rmodel$getNodeNames(stochOnly=TRUE, includeData=FALSE)
+        },
+        ## here is where the initial MCMC conf is created, for re-use -- for new version
+        createInitialMCMCconf = function() {
+            initialMCMCconf <<- configureMCMC(Rmodel)
+            nInitialSamplers <- length(initialMCMCconf$samplerConfs)
+            initialMCMCconf$addSampler(type = 'RW',       target = scalarNodeVector[1], print=FALSE)  ## add one RW sampler
+            initialMCMCconf$addSampler(type = 'RW_block', target = scalarNodeVector[1], print=FALSE)  ## add one RW_block sampler
+            #addCustomizedSamplersToInitialMCMCconf()
+            initialMCMCconf$addMonitors(monitorsVector, print=FALSE)
+            RinitialMCMC <- buildMCMC(initialMCMCconf)
+            Cmodel <<- compileNimble(Rmodel)
+            CinitialMCMC <- compileNimble(RinitialMCMC, project = Rmodel)   ## (new version) yes, we need this compileNimble call -- this is the whole point!
+            initialMCMCconf$setSamplers(1:nInitialSamplers, print=FALSE)  ## important for new version: removes all news samplers added to initial MCMC conf
+        },
+        addCustomizedSamplersToInitialMCMCconf = function(runListCode) {
+            if(is.list(runListCode)) { lapply(runListCode, function(el) addCustomizedSamplersToInitialMCMCconf(el)); return() }
+            if(is.call(runListCode)) {
+                if(is.call(runListCode[[1]]) && length(runListCode[[1]])==3 && runListCode[[1]][[3]]=='addSampler') {
+                    runListCode[[1]][[2]] <- as.name('initialMCMCconf')
+                    eval(substitute(RUNLISTCODE, list(RUNLISTCODE=runListCode)))
+                    return()
+                }
+                lapply(runListCode, function(el) addCustomizedSamplersToInitialMCMCconf(el))
+                return()
+            }
+        },
+        createGroups = function(listOfBlocks = list()) {
+            listOfBlocks <- lapply(listOfBlocks, function(blk) Rmodel$expandNodeNames(blk, returnScalarComponents=TRUE))
+            nodes <- scalarNodeVector
+            nodes <- setdiff(nodes, unlist(listOfBlocks))
+            nodeList <- lapply(nodes, function(x) x)
+            for(ng in listOfBlocks) nodeList[[length(nodeList)+1]] <- ng
+            return(nodeList)
+        },
+        newModel = function() {
+            newRmodel <- md$newModel(data=data, inits=inits)
+            return(newRmodel)
+        }
+    )
+)
+
+
+
+autoCodessParamDefaults <- function() {
+    list(
+        cutree_heights = c(0.5),#seq(0, 0.2, by=0.1),
+        makePlots = FALSE,
+        niter = 50000,
+        saveSamples = FALSE,
+        setSeed0 = TRUE,
+        verbose = TRUE
+        )
+}
+
+
+autoCodessClass_oldClass <- setRefClass(
+    Class = 'autoCodessClass_oldClass',
+    fields = list(
+        ## special
+        abModel = 'ANY',
+        it = 'numeric',
+        ## overall control
+        cutree_heights = 'numeric',
+        makePlots = 'logical',
+        niter = 'numeric',
+        saveSamples = 'logical',
+        setSeed0 = 'logical',
+        verbose = 'logical',
+        ## persistant lists of historical data
+        naming = 'list',
+        candidateGroups = 'list',
+        grouping = 'list',
+        groupSizes = 'list',
+        groupIDs = 'list',
+        samplers = 'list',
+        Cmcmcs = 'list',
+        timing = 'list',
+        samples = 'list',
+        means = 'list',
+        sds = 'list',
+        ess = 'list',
+        essPT = 'list',
+        burnedSamples = 'list',
+        empCov = 'list',
+        empCor = 'list',
+        distMatrix = 'list',
+        hTree = 'list'
+        ),
+    methods = list(
+        initialize = function(code, constants=list(), data=list(), inits=list(), control=list()) {
+            library(lattice)
+            library(coda)
+            library(nimble)
+            abModel <<- autoCodessModel_oldClass(code=code, constants=constants, data=data, inits=inits)
+            defaultsList <- autoCodessParamDefaults()
+            for(i in seq_along(defaultsList)) if(is.null(control[[names(defaultsList)[i]]])) control[[names(defaultsList)[i]]] <- defaultsList[[i]]
+            for(i in seq_along(control)) eval(substitute(verbose <<- VALUE, list(verbose=as.name(names(control)[i]), VALUE=control[[i]])))
+            it <<- 0
+        },
+        run = function(candidateGroupsList) {
+            abModel$createInitialMCMCconf()  ## here is where the initial MCMC conf is created, for re-use -- for new version
+            
+	          oldConf = abModel$initialMCMCconf
+	    
+	    
+	          autoIt <- 1
+                                     
+            confList <- lapply(candidateGroupsList, function(groups) createConfFromGroups(groups))
+            runConfListAndSaveBest(confList, paste0('auto',autoIt), auto=TRUE)
+                                       
+                                 
+            names(candidateGroups) <<- naming
+            names(grouping) <<- naming
+            names(groupSizes) <<- naming
+            names(groupIDs) <<- naming
+            names(samplers) <<- naming
+            names(Cmcmcs) <<- naming
+            names(timing) <<- naming
+            if(saveSamples) names(samples) <<- naming
+            names(means) <<- naming
+            names(sds) <<- naming
+            names(ess) <<- naming
+            names(essPT) <<- naming
+        },
+determineCandidateGroupsFromCurrentSample = function() {
+            cutreeList <- lapply(cutree_heights, function(height) cutree(hTree[[it]], h = height))
+            names(cutreeList) <- paste0('cut', cutree_heights)
+            uniqueCutreeList <- unique(cutreeList)
+            
+            candidateGroupsList <- lapply(uniqueCutreeList, function(ct) determineGroupsFromCutree(ct))
+            return(candidateGroupsList)
+        },
+        determineGroupsFromCutree = function(ct) {
+            return(lapply(unique(ct), function(x) names(ct)[ct==x]))
+        },
+        runConfListAndSaveBest = function(confList, name, auto=FALSE) {
+            RmcmcList <- timingList <- samplesList <- meansList <- sdsList <- essList <- essPTList <- essPTminList <- list()
+            for(i in seq_along(confList)) {
+                checkOverMCMCconf(confList[[i]])
+                ##confList[[i]]$addMonitors(abModel$monitorsVector, print=FALSE) ## original version
+                RmcmcList[[i]] <- buildMCMC(confList[[i]])
+            }
+            ##toCompileList <- c(list(Rmodel), RmcmcList) ## original version
+            ##compiledList <- compileNimble(toCompileList)
+            ##Cmodel <- compiledList[[1]]
+            ##CmcmcList <- compiledList[-1]
+            Cmodel <- abModel$Cmodel
+            CmcmcList <- compileNimble(RmcmcList, project = abModel$Rmodel)
+            if(!is.list(CmcmcList)) CmcmcList <- list(CmcmcList)  ## make sure compileNimble() returns a list...
+            for(i in seq_along(CmcmcList)) {
+                Cmodel$setInits(abModel$inits)
+                if(setSeed0) set.seed(0)
+                timingList[[i]] <- as.numeric(system.time(CmcmcList[[i]]$run(niter))[3])
+                ## slight hack here, to remove samples of any deterministic nodes...
+                samplesTEMP <- as.matrix(CmcmcList[[i]]$mvSamples)
+                namesToKeep <- setdiff(dimnames(samplesTEMP)[[2]], abModel$Rmodel$getNodeNames(determOnly=TRUE, returnScalarComponents=TRUE))
+                samplesList[[i]] <- samplesTEMP[, namesToKeep]
+                ## end of slight hack...
+                meansList[[i]] <- apply(samplesList[[i]], 2, mean)
+                sdsList[[i]]   <- apply(samplesList[[i]], 2, sd)
+                essList[[i]]   <- apply(samplesList[[i]], 2, effectiveSize)
+                if(!saveSamples) samplesList[[i]] <- NA
+                essPTList[[i]] <- essList[[i]] / timingList[[i]]
+                essPTminList[[i]] <- sort(essPTList[[i]])[1]
+            }
+            bestInd <- as.numeric(which(unlist(essPTminList) == max(unlist(essPTminList))))
+            if(!is.null(names(confList))) name <- paste0(name, '-', names(confList)[bestInd])
+            it <<- it + 1
+            naming[[it]] <<- name
+            candidateGroups[[it]] <<- lapply(confList, function(conf) determineGroupsFromConf(conf))
+            grouping[[it]] <<- candidateGroups[[it]][[bestInd]]
+            groupSizes[[it]] <<- determineNodeGroupSizesFromGroups(grouping[[it]])
+            groupIDs[[it]] <<- determineNodeGroupIDsFromGroups(grouping[[it]])
+            samplers[[it]] <<- determineSamplersFromGroupsAndConf(grouping[[it]], confList[[bestInd]])
+            Cmcmcs[[it]] <<- CmcmcList[[bestInd]]
+            timing[[it]] <<- timingList[[bestInd]]
+            samples[[it]] <<- samplesList[[bestInd]]
+            means[[it]] <<- meansList[[bestInd]]
+            sds[[it]] <<- sdsList[[bestInd]]
+            ess[[it]] <<- essList[[bestInd]]
+            essPT[[it]] <<- sort(essPTList[[bestInd]])
+            if(auto) {
+                ## slight hack here, to remove samples of any deterministic nodes...
+                samplesTEMP <- as.matrix(CmcmcList[[bestInd]]$mvSamples)
+                namesToKeep <- setdiff(dimnames(samplesTEMP)[[2]], abModel$Rmodel$getNodeNames(determOnly=TRUE, returnScalarComponents=TRUE))
+                burnedSamples[[it]] <<- samplesTEMP[(floor(niter/2)+1):niter, namesToKeep]
+                ## end of slight hack...
+                empCov[[it]] <<- cov(burnedSamples[[it]])
+                empCor[[it]] <<- cov2cor(empCov[[it]])
+                distMatrix[[it]] <<- as.dist(1 - abs(empCor[[it]]))
+                hTree[[it]] <<- hclust(distMatrix[[it]], method = 'complete')
+            }
+            if(!saveSamples) burnedSamples[[it]] <<- NA
+            if(verbose) printCurrent(name, confList[[bestInd]])
+            if(makePlots && auto) makeCurrentPlots(name)
+        },
+        determineGroupsFromConf = function(conf) {
+            groups <- list()
+            for(ss in conf$samplerConfs) {
+                if(ss$name == 'crossLevel') {
+                    topNodes <- ss$target
+                    lowNodes <- conf$model$getDependencies(topNodes, self=FALSE, stochOnly=TRUE, includeData=FALSE)
+                    nodes <- c(topNodes, lowNodes)
+                } else {
+                    nodes <- ss$target
+                }
+                groups[[length(groups)+1]] <- conf$model$expandNodeNames(nodes, returnScalarComponents=TRUE)
+            }
+            return(groups)
+        },
+        determineNodeGroupSizesFromGroups = function(groups) {
+            groupSizeVector <- numeric(0)
+            for(gp in groups) for(node in gp) groupSizeVector[[node]] <- length(gp)
+            return(groupSizeVector)
+        },
+        determineNodeGroupIDsFromGroups = function(groups) {
+            groupIDvector <- numeric(0)
+            for(i in seq_along(groups)) for(node in groups[[i]]) groupIDvector[[node]] <- i
+            return(groupIDvector)
+        },
+        determineSamplersFromGroupsAndConf = function(groups, conf) {
+            samplerConfs <- conf$samplerConfs
+            if(length(groups) != length(samplerConfs)) stop('something wrong')
+            samplerVector <- character(0)
+            for(i in seq_along(groups)) for(node in groups[[i]]) samplerVector[[node]] <- samplerConfs[[i]]$name
+            return(samplerVector)
+        },
+        createConfFromGroups = function(groups) {
+            ##conf <- configureMCMC(Rmodel, nodes=NULL, monitors=character(0)) ## original version
+            conf <- configureMCMC(oldConf = abModel$initialMCMCconf)  ## new version
+            conf$setSamplers()  ## new version -- removes all the samplers from initalMCMCconf
+            for(nodeGroup in groups) addSamplerToConf(abModel$Rmodel, conf, nodeGroup)
+            return(conf)
+        },
+        checkOverMCMCconf = function(conf) {
+            warn <- FALSE
+            for(ss in conf$samplerConfs) {
+                ## if(ss$name == 'end') {
+                ##     msg <- 'using \'end\' sampler may lead to results we don\'t want'
+                ##     cat(paste0('\nWARNING: ', msg, '\n\n')); warning(msg)
+                ## }
+                if(grepl('^conjugate_', ss$name) && nimbleOptions('verifyConjugatePosteriors')) {
+                    ##msg <- 'conjugate sampler running slow due to checking the posterior'
+                    ##cat(paste0('\nWARNING: ', msg, '\n\n')); warning(msg)
+                    warn <- TRUE
+                }
+            }
+            if(warn) {
+                msg <- 'Conjugate sampler functions in \'default\' conf are running slow due to verifying the posterior;\nThis behaviour can be changed using a NIMBLE package option.'
+                warning(msg, call. = FALSE)
+            }
+        },
+        printCurrent = function(name, conf) {
+            cat(paste0('\n################################\nbegin iteration ', it, ': ', name, '\n################################\n'))
+            if(length(candidateGroups[[it]]) > 1) { cat('\ncandidate groups:\n'); cg<-candidateGroups[[it]]; for(i in seq_along(cg)) { cat(paste0('\n',names(cg)[i],':\n')); printGrouping(cg[[i]]) } }
+            cat('\ngroups:\n'); printGrouping(grouping[[it]])
+            cat('\nsamplers:\n'); conf$getSamplers()
+            cat(paste0('\nMCMC runtime: ', round(timing[[it]], 1), ' seconds\n'))
+            cat('\nESS:\n'); print(round(ess[[it]], 0))
+            cat('\nESS/time:\n'); print(round(essPT[[it]], 1))
+            cat(paste0('\n################################\nend iteration ', it, ': ', name, '\n################################\n\n'))
+        },
+        makeCurrentPlots = function(name) {
+            dev.new()
+            if(inherits(try(plot(as.dendrogram(hTree[[it]]), ylim=c(0,1), main=name), silent=TRUE), 'try-error')) dev.off()
+        },
+        printGrouping = function(g) {
+            for(i in seq_along(g)) cat(paste0('[', i, '] ', paste0(g[[i]], collapse=', '), '\n'))
+        },
+        groupingsEquiv = function(grouping1, grouping2) {
+            grouping1 <- lapply(grouping1, sort)
+            grouping2 <- lapply(grouping2, sort)
+            while(length(grouping1) > 0) {
+                grp1 <- grouping1[[1]]
+                found <- FALSE
+                for(i in seq_along(grouping2)) {
+                    grp2 <- grouping2[[i]]
+                    if(identical(grp1, grp2)) {
+                        found <- TRUE
+                        grouping1[1] <- grouping2[i] <- NULL
+                        break
+                    }
+                }
+                if(!found) return(FALSE)
+            }
+            if(length(grouping2) == 0) return(TRUE) else return(FALSE)
+        }
+        )
+)
+
 
 
 #' Class \code{MCMCsuiteClass}
@@ -1026,13 +1473,7 @@ MCMC_CODESSClass <- setRefClass(
       check               = getNimbleOption('checkModel'),
       debug               = FALSE) {
       
-      if(debug) browser()
-      code <<- code
-      constants <<- constants
-      data <<- data
-      inits <<- inits
-      constantsAndData <<- c(constants, data)
-      Rmodel <<- nimbleModel(code=code, constants=constants, data=data, inits=inits, check=check)
+            
       niter <<- niter
       burnin <<- burnin
       thin <<- thin
@@ -1073,6 +1514,7 @@ MCMC_CODESSClass <- setRefClass(
       if(makePlot)           generate_plots()
     },
     
+   
     setMonitors = function(newMonitors) {
       if(length(newMonitors) == 0) newMonitors <- Rmodel$getNodeNames(topOnly = TRUE, stochOnly = TRUE)
       newMonitors <- Rmodel$expandNodeNames(newMonitors, returnScalarComponents = TRUE)
@@ -1298,19 +1740,19 @@ MCMC_CODESSClass <- setRefClass(
           
           
         }
-        
-        Cmcmc$run(niter, time = TRUE)
+        timeResult <- system.time({Cmcmc$run(niter, time = TRUE)})
+     
         timeResults <-Cmcmc$getTimes()
-        timeEach  <- rep(timeResult[3], length(monitorVars1))
-        timeOthers <- 0
+        
         CmvSamples <- Cmcmc$mvSamples
         samplesArray <- as.matrix(CmvSamples)
         colnames(samplesArray) = monitorVars1
-        
-        for(i in 1: (length(timeResults)-length(RmcmcTargetList[[iMCMC]]))){
-          timeOthers = timeOthers + timeResults[i] 
+        if (length(RmcmcTargetList[[iMCMC]])>0){
+          timeOthers = timeResult[3] - sum(timeResults[(length(timeResults)-length(RmcmcTargetList[[iMCMC]])+1):length(timeResults)])
         }
-	  	
+        
+	  	  timeEach  <- rep(timeOthers, length(monitorVars1))
+        
 	
 
         if (length(RmcmcTargetList[[iMCMC]])>0){
@@ -1476,6 +1918,7 @@ MCMC_CODESSClass <- setRefClass(
       for(name in ls(env))   lst[[name]] <- get(name, env)
       return(lst)
     },
+       
     
     show = function() {
       cat(paste0('MCMC_CODESS object\n',
