@@ -20,9 +20,7 @@ export(nimbleUserNamespace)
 export("nfVar<-")
 export("values<-")
 export(MCMCsuite)
-<<<<<<< HEAD
 export(Rmatrix2mvOneVar)
-=======
 export(MCMC_CODESS)
 export(GroupOfLeastMixing)
 export(ImproveMixing)
@@ -30,7 +28,6 @@ export(BuildMCMCconf)
 export(BuildMCMCconfOld)
 export(BuildDefaultConf)
 export(BuildCombinedConf)
->>>>>>> codess
 export(asCol)
 export(asRow)
 export(autoBlock)
